@@ -1,2 +1,4 @@
 .DS_Store
-CoBuy 20-Day Build, Learn and Sync Plan.md
+node_modules/
+.env
+*.log

@@ -1,0 +1,26 @@
+{
+  "name": "cobuy-backend",
+  "version": "1.0.0",
+  "description": "B2B group-buying platform backend for independent cloud kitchens",
+  "main": "src/app.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js",
+    "db:migrate": "node src/db/migrate.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.9.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "author": "Dhruv (Database & Auth)",
+  "license": "ISC"
+}
+
