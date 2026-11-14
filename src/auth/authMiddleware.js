@@ -89,8 +89,35 @@ function requireRole(allowedRoles) {
   };
 }
 
+/**
+ * Optional Authentication:
+ * If Authorization header is present, decodes user into req.user.
+ * If not present, proceeds without failing.
+ */
+function optionalAuthenticate(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return next();
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = verifyToken(token);
+    req.user = {
+      userId: decoded.userId,
+      username: decoded.username,
+      email: decoded.email,
+      roles: decoded.roles || []
+    };
+  } catch (error) {
+    // In optional auth, invalid token is treated as unauthenticated
+  }
+  return next();
+}
+
 module.exports = {
   authenticate,
-  requireRole
+  requireRole,
+  optionalAuthenticate
 };
 

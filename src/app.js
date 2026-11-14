@@ -8,7 +8,11 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { testConnection } = require('./db/connection');
+const prisma = require('./db/prisma');
 const authRoutes = require('./auth/authRoutes');
+const restaurantRoutes = require('./profiles/restaurantRoutes');
+const supplierRoutes = require('./profiles/supplierRoutes');
+const discoveryRoutes = require('./pools/discoveryRoutes');
 
 // Load environment configuration
 dotenv.config();
@@ -30,6 +34,9 @@ app.use(express.json());
 // API Routes:
 // ----------------------------------------------------------------------------
 app.use('/api/users', authRoutes);
+app.use('/api/restaurants', restaurantRoutes);
+app.use('/api/suppliers', supplierRoutes);
+app.use('/api/pools', discoveryRoutes);
 
 // ----------------------------------------------------------------------------
 // Health Check Route: GET /health

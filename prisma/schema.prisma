@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model buying_pools {
+  pool_id            String               @id @db.Char(36)
+  catalogue_id       String               @db.Char(36)
+  geographic_zone    Unsupported("point")
+  status             String               @default("ACTIVE") @db.VarChar(20)
+  current_qty        Decimal              @default(0.00) @db.Decimal(10, 2)
+  target_moq         Decimal              @db.Decimal(10, 2)
+  expiration_time    DateTime             @db.Timestamp(0)
+  supplier_catalogue supplier_catalogue   @relation(fields: [catalogue_id], references: [catalogue_id], onUpdate: NoAction, map: "fk_pools_catalogue")
+  micro_orders       micro_orders[]
+
+  @@index([catalogue_id], map: "fk_pools_catalogue")
+  @@index([geographic_zone(length: 32)], map: "idx_pools_zone")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model micro_orders {
+  order_id       String       @id @db.Char(36)
+  pool_id        String       @db.Char(36)
+  restaurant_id  String       @db.Char(36)
+  requested_qty  Decimal      @db.Decimal(10, 2)
+  pledged_amount Decimal      @db.Decimal(10, 2)
+  payment_status String       @default("PENDING") @db.VarChar(20)
+  created_at     DateTime     @default(now()) @db.Timestamp(0)
+  buying_pools   buying_pools @relation(fields: [pool_id], references: [pool_id], onUpdate: NoAction, map: "fk_orders_pool")
+  restaurants    restaurants  @relation(fields: [restaurant_id], references: [restaurant_id], onUpdate: NoAction, map: "fk_orders_restaurant")
+
+  @@unique([pool_id, restaurant_id], map: "uq_orders_pool_restaurant")
+  @@index([restaurant_id], map: "fk_orders_restaurant")
+}
+
+model products {
+  product_id         String               @id @db.Char(36)
+  product_name       String               @db.VarChar(100)
+  unit_of_measure    String               @db.VarChar(20)
+  category           String?              @db.VarChar(50)
+  supplier_catalogue supplier_catalogue[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model restaurants {
+  restaurant_id  String               @id @db.Char(36)
+  owner_id       String               @db.Char(36)
+  business_name  String               @db.VarChar(100)
+  location_coord Unsupported("point")
+  wallet_balance Decimal              @default(0.00) @db.Decimal(10, 2)
+  address_text   String?              @db.Text
+  micro_orders   micro_orders[]
+  users          users                @relation(fields: [owner_id], references: [user_id], onUpdate: NoAction, map: "fk_restaurants_owner")
+
+  @@index([owner_id], map: "fk_restaurants_owner")
+  @@index([location_coord(length: 32)], map: "idx_restaurants_location")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model supplier_catalogue {
+  catalogue_id   String         @id @db.Char(36)
+  supplier_id    String         @db.Char(36)
+  product_id     String         @db.Char(36)
+  price_per_unit Decimal        @db.Decimal(10, 2)
+  min_order_qty  Decimal        @db.Decimal(10, 2)
+  buying_pools   buying_pools[]
+  products       products       @relation(fields: [product_id], references: [product_id], onUpdate: NoAction, map: "fk_catalogue_product")
+  suppliers      suppliers      @relation(fields: [supplier_id], references: [supplier_id], onUpdate: NoAction, map: "fk_catalogue_supplier")
+
+  @@unique([supplier_id, product_id], map: "uq_catalogue_supplier_product")
+  @@index([product_id], map: "fk_catalogue_product")
+}
+
+model suppliers {
+  supplier_id        String               @id @db.Char(36)
+  user_id            String               @db.Char(36)
+  company_name       String               @db.VarChar(100)
+  contact_email      String               @unique(map: "uq_suppliers_email") @db.VarChar(100)
+  warehouse_coord    Unsupported("point")
+  supplier_catalogue supplier_catalogue[]
+  users              users                @relation(fields: [user_id], references: [user_id], onUpdate: NoAction, map: "fk_suppliers_user")
+
+  @@index([user_id], map: "fk_suppliers_user")
+  @@index([warehouse_coord(length: 32)], map: "idx_suppliers_warehouse")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model user_roles {
+  user_id   String @db.Char(36)
+  role_name String @db.VarChar(20)
+  users     users  @relation(fields: [user_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_user_roles_user")
+
+  @@id([user_id, role_name])
+}
+
+model users {
+  user_id       String        @id @db.Char(36)
+  username      String        @unique(map: "uq_users_username") @db.VarChar(50)
+  email         String        @unique(map: "uq_users_email") @db.VarChar(100)
+  password_hash String        @db.VarChar(255)
+  created_at    DateTime      @default(now()) @db.Timestamp(0)
+  restaurants   restaurants[]
+  suppliers     suppliers[]
+  user_roles    user_roles[]
+}

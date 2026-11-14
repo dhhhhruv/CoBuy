@@ -1,20 +1,20 @@
 // ============================================================================
 // File: src/auth/authController.js
 // Owner: Dhruv (Database & Auth)
-// Purpose: Controller handlers for user registration, login, and profile lookup.
+// Purpose: Controller handlers for user registration, login, and profile lookup using Prisma ORM.
 // ============================================================================
 
 const crypto = require('crypto');
-const { pool } = require('../db/connection');
+const prisma = require('../db/prisma');
 const { hashPassword, comparePassword, generateToken } = require('./authUtils');
 
 // Allowed roles as settled in DECISIONS.md
 const ALLOWED_ROLES = ['restaurant_owner', 'supplier'];
 
 /**
- * Register a new user and assign roles within an ACID database transaction.
- * Viva Note: Inserting into USERS and USER_ROLES happens inside an atomic transaction.
- * If role insertion fails, the user record is rolled back, preventing orphaned users.
+ * Register a new user and assign roles within an atomic Prisma interactive transaction.
+ * Viva Note: prisma.$transaction ensures that if assigning roles fails, the user record
+ * is automatically rolled back, preventing orphaned users in the database.
  */
 async function register(req, res) {
   const { username, email, password, roles } = req.body;
@@ -78,22 +78,23 @@ async function register(req, res) {
     });
   }
 
-  // Deduplicate roles if duplicate values were passed in array
   const uniqueRoles = [...new Set(roles)];
-
   const cleanUsername = username.trim();
   const cleanEmail = email.trim().toLowerCase();
 
-  // 2. Check for duplicate username or email
   try {
-    const [existingUsers] = await pool.query(
-      'SELECT user_id, username, email FROM users WHERE username = ? OR email = ? LIMIT 1',
-      [cleanUsername, cleanEmail]
-    );
+    // 2. Check for duplicate username or email via Prisma
+    const existingUser = await prisma.users.findFirst({
+      where: {
+        OR: [
+          { username: cleanUsername },
+          { email: cleanEmail }
+        ]
+      }
+    });
 
-    if (existingUsers.length > 0) {
-      const match = existingUsers[0];
-      const field = match.username.toLowerCase() === cleanUsername.toLowerCase() ? 'Username' : 'Email';
+    if (existingUser) {
+      const field = existingUser.username.toLowerCase() === cleanUsername.toLowerCase() ? 'Username' : 'Email';
       return res.status(409).json({
         success: false,
         error: {
@@ -108,44 +109,40 @@ async function register(req, res) {
     const passwordHash = await hashPassword(password);
     const userId = crypto.randomUUID();
 
-    // 4. Atomic Transaction: Insert into USERS and USER_ROLES
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
-
-      // Insert primary user row
-      await connection.query(
-        'INSERT INTO users (user_id, username, email, password_hash) VALUES (?, ?, ?, ?)',
-        [userId, cleanUsername, cleanEmail, passwordHash]
-      );
-
-      // Insert role mappings into USER_ROLES
-      for (const roleName of uniqueRoles) {
-        await connection.query(
-          'INSERT INTO user_roles (user_id, role_name) VALUES (?, ?)',
-          [userId, roleName]
-        );
-      }
-
-      await connection.commit();
-
-      return res.status(201).json({
-        success: true,
+    // 4. Atomic Prisma Transaction: Create User & UserRoles
+    const newUser = await prisma.$transaction(async (tx) => {
+      const user = await tx.users.create({
         data: {
-          userId,
+          user_id: userId,
           username: cleanUsername,
           email: cleanEmail,
-          roles: uniqueRoles,
-          createdAt: new Date().toISOString()
-        },
-        timestamp: new Date().toISOString()
+          password_hash: passwordHash
+        }
       });
-    } catch (txError) {
-      await connection.rollback();
-      throw txError;
-    } finally {
-      connection.release();
-    }
+
+      for (const roleName of uniqueRoles) {
+        await tx.user_roles.create({
+          data: {
+            user_id: userId,
+            role_name: roleName
+          }
+        });
+      }
+
+      return user;
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        userId: newUser.user_id,
+        username: newUser.username,
+        email: newUser.email,
+        roles: uniqueRoles,
+        createdAt: newUser.created_at.toISOString()
+      },
+      timestamp: new Date().toISOString()
+    });
   } catch (error) {
     console.error('[Registration Error]:', error);
     return res.status(500).json({
@@ -160,11 +157,10 @@ async function register(req, res) {
 }
 
 /**
- * Log in an existing user, verify bcrypt password, and return a signed JWT token.
+ * Log in an existing user via Prisma, verify bcrypt password, and return a signed JWT token.
  */
 async function login(req, res) {
   const { email, username, password } = req.body;
-
   const identifier = (email || username || '').trim();
 
   if (!identifier || !password) {
@@ -179,15 +175,20 @@ async function login(req, res) {
   }
 
   try {
-    // 1. Query user by email or username
-    const [users] = await pool.query(
-      'SELECT user_id, username, email, password_hash, created_at FROM users WHERE email = ? OR username = ? LIMIT 1',
-      [identifier.toLowerCase(), identifier]
-    );
+    // Query user by email or username, including their relation to user_roles
+    const user = await prisma.users.findFirst({
+      where: {
+        OR: [
+          { email: identifier.toLowerCase() },
+          { username: identifier }
+        ]
+      },
+      include: {
+        user_roles: true
+      }
+    });
 
-    if (users.length === 0) {
-      // Viva Note on Security: Return a generic error message rather than "User not found".
-      // This prevents username enumeration attacks where an attacker probes to see which emails exist.
+    if (!user) {
       return res.status(401).json({
         success: false,
         error: {
@@ -198,9 +199,7 @@ async function login(req, res) {
       });
     }
 
-    const user = users[0];
-
-    // 2. Compare password against stored bcrypt hash
+    // Verify bcrypt password
     const isPasswordValid = await comparePassword(password, user.password_hash);
     if (!isPasswordValid) {
       return res.status(401).json({
@@ -213,23 +212,15 @@ async function login(req, res) {
       });
     }
 
-    // 3. Fetch user's assigned roles from USER_ROLES table
-    const [roleRows] = await pool.query(
-      'SELECT role_name FROM user_roles WHERE user_id = ?',
-      [user.user_id]
-    );
+    const roles = user.user_roles.map(r => r.role_name);
 
-    const roles = roleRows.map(r => r.role_name);
-
-    // 4. Generate signed JWT token
-    const tokenPayload = {
+    // Issue JWT token
+    const token = generateToken({
       userId: user.user_id,
       username: user.username,
       email: user.email,
       roles
-    };
-
-    const token = generateToken(tokenPayload);
+    });
 
     return res.status(200).json({
       success: true,
@@ -275,4 +266,3 @@ module.exports = {
   login,
   getMe
 };
-

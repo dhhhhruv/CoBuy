@@ -4,13 +4,13 @@ This document records all settled architectural, schema, and design decisions fo
 
 ---
 
-## 1. Database & Engine Selection
-- **Decision:** MySQL (version 8.0+).
-- **Rationale:** 
-  - `context.md` specifies spatial distance queries using `ST_Distance_Sphere()`, which is a native MySQL function.
-  - Native spatial support with `POINT` types and spatial indexing.
-  - Full ACID transaction support via the InnoDB storage engine for the aggregation engine.
-- **Viva Defense:** "We selected MySQL because our geographical 5 km radius calculations rely on native spherical distance calculations (`ST_Distance_Sphere`), and InnoDB provides ACID guarantees necessary for concurrent micro-order quantity aggregation."
+## 1. Database & ORM Selection
+- **Database Engine:** MySQL (version 8.0+).
+- **ORM / Data Access Layer:** Prisma ORM (`@prisma/client`).
+- **Rationale & Viva Defense:** 
+  - Prisma provides type-safe database queries, automated relational modeling, and atomic transaction handling across the core entities.
+  - **Prisma & Spatial Limitation (Viva Highlight):** Prisma's schema definition language does not natively support MySQL WGS 84 spatial types (`POINT SRID 4326`) or `SPATIAL INDEX`. We represent spatial columns as `Unsupported("point")` in `schema.prisma`. For standard CRUD operations and relations, we use standard Prisma Client methods (`prisma.users`, `prisma.restaurants`, etc.); for spatial queries (`ST_Distance_Sphere`), we execute native SQL via `prisma.$queryRaw`.
+  - InnoDB engine provides full ACID transaction support for concurrent micro-order quantity aggregation.
 
 ---
 
