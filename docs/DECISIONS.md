@@ -86,15 +86,76 @@ This document records all settled architectural, schema, and design decisions fo
 - **Target MOQ Snapshot:** `buying_pools.target_moq` is copied from `supplier_catalogue.min_order_qty` at pool creation to preserve historical integrity even if the supplier later adjusts their catalogue minimum.
 - **Current Quantity Running Total:** `buying_pools.current_qty` is maintained as a running sum updated inside an atomic transaction when micro-orders are placed, avoiding repeated `SUM()` table scans.
 
+## 7. Relational Model & The 7 Cardinalities (Day 14 Final Specification)
+
+CoBuy consists of 8 tables modeling the procurement lifecycle. Below is the exact cardinality breakdown and junction table justification for viva defense:
+
+### 7.1. The 7 Relationships & Cardinalities
+1. **`users` 1 : N `user_roles`**
+   - **Participation:** Mandatory on `user_roles` (cannot exist without a user), optional on `users` (during transitional signup).
+   - **Rule:** A single user can hold one or multiple roles (`restaurant_owner`, `supplier`).
+   - **FK:** `user_roles.user_id` $\rightarrow$ `users.user_id` (`ON DELETE CASCADE`).
+
+2. **`users` 1 : N `restaurants`**
+   - **Participation:** Optional on `users` (only for users with `restaurant_owner` role); mandatory on `restaurants`.
+   - **Rule:** A restaurant owner can register and operate multiple cloud kitchen branches under one account.
+   - **FK:** `restaurants.owner_id` $\rightarrow$ `users.user_id` (`ON DELETE RESTRICT`).
+
+3. **`users` 1 : N `suppliers`**
+   - **Participation:** Optional on `users` (only for users with `supplier` role); mandatory on `suppliers`.
+   - **Rule:** A supplier account is owned by a verified user identity.
+   - **FK:** `suppliers.user_id` $\rightarrow$ `users.user_id` (`ON DELETE RESTRICT`).
+
+4. **`suppliers` 1 : N `supplier_catalogue`**
+   - **Participation:** Optional on `suppliers` (supplier can register before listing items); mandatory on `supplier_catalogue`.
+   - **Rule:** A wholesale supplier publishes multiple catalogue offers.
+   - **FK:** `supplier_catalogue.supplier_id` $\rightarrow$ `suppliers.supplier_id` (`ON DELETE RESTRICT`).
+
+5. **`products` 1 : N `supplier_catalogue`**
+   - **Participation:** Optional on `products` (system catalogue products might not yet be offered by any vendor); mandatory on `supplier_catalogue`.
+   - **Rule:** A base wholesale product (e.g. "Tomatoes") can be offered by many competing suppliers at different prices and MOQs.
+   - **FK:** `supplier_catalogue.product_id` $\rightarrow$ `products.product_id` (`ON DELETE RESTRICT`).
+
+6. **`supplier_catalogue` 1 : N `buying_pools`**
+   - **Participation:** Optional on `supplier_catalogue`; mandatory on `buying_pools`.
+   - **Rule:** An active catalogue offer can have one or multiple time-windowed buying pools launched for it over time.
+   - **FK:** `buying_pools.catalogue_id` $\rightarrow$ `supplier_catalogue.catalogue_id` (`ON DELETE RESTRICT`).
+
+7. **`buying_pools` 1 : N `micro_orders`** & **`restaurants` 1 : N `micro_orders`**
+   - **Participation:** Mandatory on `micro_orders` (each micro-order must specify both a pool and a restaurant).
+   - **Rule:** Resolves the Many-to-Many relationship between `buying_pools` and `restaurants`.
+   - **Composite Constraint:** `UNIQUE(pool_id, restaurant_id)` enforces that a kitchen participates at most once per buying pool.
+
+### 7.2. The Two Junction Tables Resolving Many-to-Many Relationships
+1. **`user_roles`**: Resolves Many-to-Many between `users` and abstract system roles. Composite Primary Key `(user_id, role_name)` prevents duplicate assignments.
+2. **`supplier_catalogue`**: Resolves Many-to-Many between `suppliers` and `products`. An independent primary key `catalogue_id` is used with a composite unique key `UNIQUE(supplier_id, product_id)` to ensure a supplier does not create redundant duplicate pricing records for the same base ingredient.
+
 ---
 
-## 7. Frontend Architecture & Framework Selection (Debangshu)
-- **Decision:** React Single Page Application (SPA) bundled with Vite and styled with Tailwind CSS.
-- **Rationale:**
-  - **Component Reusability:** The CoBuy UI revolves around reusable, state-driven widgets such as the `MOQProgressBar`, `PoolCard`, `MicroOrderModal`, and `StatusBadge`. React's component hierarchy provides clean encapsulation for these units.
-  - **Reactive Calculations:** Calculating micro-order liabilities ($\text{Pledged Amount} = \text{Requested Quantity} \times \text{Price per Unit}$) and progress percentages ($\text{Progress} = \frac{\text{Current Qty}}{\text{Target MOQ}} \times 100$) requires reactive local UI state without page reloads.
-  - **Role-Based Routing:** Client-side routing seamlessly separates the `restaurant_owner` and `supplier` portals while sharing a unified auth state (`JWT` in `localStorage`).
-  - **Decoupled Architecture:** The frontend communicates strictly via standard RESTful JSON calls adhering to [`docs/API_CONTRACT.md`](API_CONTRACT.md), allowing Dhruv's database/auth and Shaaz's aggregation engine to evolve independently of the UI.
-- **Viva Defense:** *"We selected React with Vite because CoBuy's core user experience is centered on dynamic pool aggregation and interactive micro-order commitment. React's declarative component model reactively re-renders progress indicators and order totals without full page refreshes, and Vite offers lightning-fast builds with zero runtime overhead."*
+## 8. Complete Schema Constraints Table
 
-
+| Table | Constraint Name | Type | Target Columns | Rationale / Viva Defense |
+|---|---|---|---|---|
+| `users` | `PRIMARY` | PK | `user_id` | Immutable UUIDv4 surrogate identifier |
+| `users` | `uq_users_username` | UNIQUE | `username` | Prevents duplicate user handles |
+| `users` | `uq_users_email` | UNIQUE | `email` | Guarantees single account per email address |
+| `user_roles` | `PRIMARY` | Composite PK | `(user_id, role_name)` | Prevents duplicate role assignment per user |
+| `user_roles` | `fk_user_roles_user` | FK | `user_id` $\rightarrow$ `users.user_id` | `ON DELETE CASCADE` cleans up roles if user is removed |
+| `restaurants` | `PRIMARY` | PK | `restaurant_id` | Immutable UUIDv4 identifier |
+| `restaurants` | `fk_restaurants_owner`| FK | `owner_id` $\rightarrow$ `users.user_id` | `ON DELETE RESTRICT` protects audit trail |
+| `restaurants` | `idx_restaurants_location`| SPATIAL INDEX | `location_coord` | Accelerates 2D R-Tree bounding-box spatial queries |
+| `suppliers` | `PRIMARY` | PK | `supplier_id` | Immutable UUIDv4 identifier |
+| `suppliers` | `uq_suppliers_email` | UNIQUE | `contact_email` | Prevents duplicate supplier business registrations |
+| `suppliers` | `fk_suppliers_user` | FK | `user_id` $\rightarrow$ `users.user_id` | Links vendor profile to authenticated user identity |
+| `products` | `PRIMARY` | PK | `product_id` | Immutable UUIDv4 identifier |
+| `supplier_catalogue` | `PRIMARY` | PK | `catalogue_id` | Surrogate key for pool referencing |
+| `supplier_catalogue` | `uq_catalogue_supplier_product` | Composite UNIQUE | `(supplier_id, product_id)` | One commercial offer per product per supplier |
+| `supplier_catalogue` | `chk_catalogue_price` | CHECK | `price_per_unit > 0` | Prevents zero or negative wholesale prices |
+| `supplier_catalogue` | `chk_catalogue_moq` | CHECK | `min_order_qty > 0` | Prevents impossible wholesale MOQ quantities |
+| `buying_pools` | `PRIMARY` | PK | `pool_id` | UUIDv4 identifier |
+| `buying_pools` | `idx_pools_zone` | SPATIAL INDEX | `geographic_zone` | Accelerates spatial proximity indexing |
+| `buying_pools` | `chk_pools_status` | CHECK | `status IN ('ACTIVE','FULFILLED','EXPIRED','CANCELLED')` | Enforces finite state machine domain integrity |
+| `micro_orders` | `PRIMARY` | PK | `order_id` | UUIDv4 identifier |
+| `micro_orders` | `uq_orders_pool_restaurant` | Composite UNIQUE | `(pool_id, restaurant_id)` | One micro-order per restaurant per buying pool |
+| `micro_orders` | `chk_orders_qty` | CHECK | `requested_qty > 0` | Prevents zero or negative micro-order pledges |
+| `micro_orders` | `chk_orders_payment`| CHECK | `payment_status IN ('PENDING','PAID')` | Enforces financial settlement state domain |

@@ -14,6 +14,8 @@ const authRoutes = require('./auth/authRoutes');
 const restaurantRoutes = require('./profiles/restaurantRoutes');
 const supplierRoutes = require('./profiles/supplierRoutes');
 const discoveryRoutes = require('./pools/discoveryRoutes');
+const orderRoutes = require('./orders/orderRoutes');
+const { notFoundHandler, errorHandler } = require('./middleware/errorHandler');
 
 // Load environment configuration
 dotenv.config();
@@ -40,6 +42,7 @@ app.use('/api/users', authRoutes);
 app.use('/api/restaurants', restaurantRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/pools', discoveryRoutes);
+app.use('/api/orders', orderRoutes);
 
 // ----------------------------------------------------------------------------
 // Health Check Route: GET /health
@@ -67,6 +70,12 @@ app.get('/health', async (req, res) => {
 
   return res.status(200).json(responsePayload);
 });
+
+// ----------------------------------------------------------------------------
+// 404 Route Not Found & Global Centralized Error Handler
+// ----------------------------------------------------------------------------
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 // Start the server if this file is executed directly
 if (require.main === module) {
