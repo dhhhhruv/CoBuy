@@ -1,0 +1,8 @@
+{
+  "name": "cobuy-frontend",
+  "version": "1.0.0",
+  "description": "CoBuy B2B Group-Buying Client Application",
+  "private": true,
+  "type": "module"
+}
+

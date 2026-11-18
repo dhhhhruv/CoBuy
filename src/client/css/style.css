@@ -1,0 +1,642 @@
+/* ==========================================================================
+   CoBuy — Component Stylesheet
+   Colours come exclusively from css/theme.css custom properties.
+   No hard-coded hex values anywhere in this file.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. RESET
+   -------------------------------------------------------------------------- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html { scroll-behavior: smooth; }
+
+/* --------------------------------------------------------------------------
+   2. BASE — typography & page scaffold
+   -------------------------------------------------------------------------- */
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-14);
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--text);
+  background-color: var(--bg);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Newsreader roles */
+.wordmark,
+.page-title,
+.card-title {
+  font-family: var(--font-serif);
+  font-weight: 500;
+}
+
+/* --------------------------------------------------------------------------
+   3. FOCUS — 2 px outline on every interactive element, no exceptions
+   -------------------------------------------------------------------------- */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   4. PAGE LAYOUT
+   -------------------------------------------------------------------------- */
+.page-wrapper {
+  padding: var(--gap-32) var(--gap-28);
+}
+
+.page-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-22);
+}
+
+.container {
+  width: 100%;
+  max-width: 1160px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: var(--gap-28);
+  padding-right: var(--gap-28);
+}
+
+.main-content {
+  flex: 1;
+  padding-top: var(--gap-32);
+  padding-bottom: var(--gap-32);
+}
+
+/* Page title */
+.page-title {
+  font-size: var(--text-30);
+  color: var(--text);
+  line-height: 1.25;
+}
+
+/* --------------------------------------------------------------------------
+   5. NAVBAR
+   -------------------------------------------------------------------------- */
+.navbar {
+  background-color: var(--card);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+.navbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  gap: var(--gap-16);
+}
+
+/* Wordmark */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-8);
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: var(--text-24);
+  color: var(--text);
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.brand-badge {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: var(--text-12);
+  background-color: var(--accent);
+  color: var(--on-accent);
+  padding: 2px 6px;
+  border-radius: var(--radius-pill);
+  letter-spacing: 0.4px;
+}
+
+/* Nav links */
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-4);
+  list-style: none;
+  flex-wrap: wrap;
+}
+
+.nav-link {
+  font-size: var(--text-14);
+  font-weight: 500;
+  color: var(--text-2);
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: var(--radius-btn);
+  transition: color 0.12s, background-color 0.12s;
+}
+
+.nav-link:hover,
+.nav-link.active {
+  color: var(--accent);
+  background-color: var(--track);
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-8);
+  flex-shrink: 0;
+}
+
+/* --------------------------------------------------------------------------
+   6. BUTTONS
+   -------------------------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gap-8);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: var(--text-14);
+  min-height: 44px;
+  padding: 0 var(--gap-20);
+  border-radius: var(--radius-btn);
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 0.12s, color 0.12s, border-color 0.12s;
+}
+
+/* Primary */
+.btn-primary {
+  background-color: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+.btn-primary:hover {
+  /* slightly darker — derived by mixing accent toward black at 12 % */
+  filter: brightness(0.90);
+}
+
+/* Secondary / outline */
+.btn-outline,
+.btn-secondary {
+  background-color: transparent;
+  border-color: var(--border);
+  color: var(--text);
+}
+.btn-outline:hover,
+.btn-secondary:hover {
+  background-color: var(--track);
+}
+
+/* Small modifier */
+.btn-sm {
+  min-height: 36px;
+  padding: 0 var(--gap-12);
+  font-size: var(--text-13);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: none;
+}
+
+/* --------------------------------------------------------------------------
+   7. STATUS CHIP — one style for all statuses per spec
+      Do not add per-status colours without asking first.
+   -------------------------------------------------------------------------- */
+.badge,
+.badge-status-active,
+.badge-status-pending,
+.badge-status-fulfilled,
+.badge-status-paid,
+.badge-status-expired,
+.badge-status-cancelled,
+.badge-role-kitchen,
+.badge-role-supplier {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-4);
+  padding: 3px 10px;
+  font-size: var(--text-12);
+  font-weight: 500;
+  border-radius: var(--radius-pill);
+  background-color: var(--chip-bg);
+  color: var(--chip-text);
+  border: none;
+  letter-spacing: 0.2px;
+}
+
+/* --------------------------------------------------------------------------
+   8. CARDS
+   -------------------------------------------------------------------------- */
+.card {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--gap-20);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-14);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--gap-12);
+}
+
+.card-title {
+  font-size: var(--text-22);
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.card-subtitle {
+  font-size: var(--text-13);
+  color: var(--text-2);
+  margin-top: var(--gap-4);
+}
+
+/* Stat box */
+.stat-box {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--gap-20);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-4);
+}
+
+.stat-label {
+  font-size: var(--text-12);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-2);
+}
+
+.stat-value {
+  font-family: var(--font-serif);
+  font-size: var(--text-30);
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.1;
+}
+
+/* --------------------------------------------------------------------------
+   9. PROGRESS BAR
+   -------------------------------------------------------------------------- */
+.moq-progress-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-8);
+}
+
+.moq-progress-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-13);
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.moq-progress-track {
+  width: 100%;
+  height: 8px;
+  background-color: var(--track);
+  border-radius: var(--radius-bar);
+  overflow: hidden;
+}
+
+.moq-progress-fill,
+.moq-progress-fill.status-active,
+.moq-progress-fill.status-fulfilled {
+  height: 100%;
+  background-color: var(--fill);  /* flat solid, no gradient */
+  border-radius: var(--radius-bar);
+  transition: width 0.35s ease;
+}
+
+.moq-progress-footer {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-12);
+  color: var(--text-2);
+}
+
+/* --------------------------------------------------------------------------
+   10. HEALTH BANNER
+   -------------------------------------------------------------------------- */
+.health-banner {
+  background-color: var(--card);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: var(--text-12);
+  padding: 6px var(--gap-28);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.health-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.health-dot.up   { background-color: var(--fill); }
+.health-dot.down { background-color: var(--danger); }
+
+/* --------------------------------------------------------------------------
+   11. FORMS
+   -------------------------------------------------------------------------- */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-4);
+  margin-bottom: var(--gap-16);
+}
+
+.form-label {
+  font-size: var(--text-13);
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.form-control {
+  width: 100%;
+  height: 44px;
+  padding: 0 var(--gap-12);
+  font-family: var(--font-sans);
+  font-size: var(--text-14);
+  color: var(--text);
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  transition: border-color 0.12s;
+  appearance: auto;
+}
+
+.form-control:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--accent);
+}
+
+.form-control::placeholder {
+  color: var(--text-2);
+  opacity: 0.7;
+}
+
+/* Textarea variant */
+textarea.form-control {
+  height: auto;
+  min-height: 100px;
+  padding-top: var(--gap-12);
+  padding-bottom: var(--gap-12);
+  resize: vertical;
+}
+
+.form-help {
+  font-size: var(--text-12);
+  color: var(--text-2);
+}
+
+/* Alert box inside forms */
+.form-alert {
+  font-size: var(--text-13);
+  padding: var(--gap-12);
+  border-radius: var(--radius-input);
+  border: 1px solid var(--border);
+}
+
+.form-alert--error {
+  background-color: var(--danger-bg);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.form-alert--success {
+  background-color: var(--track);
+  color: var(--accent);
+  border-color: var(--fill);
+}
+
+/* --------------------------------------------------------------------------
+   12. GRIDS
+   -------------------------------------------------------------------------- */
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--gap-22);
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--gap-22);
+}
+
+.grid-4 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--gap-16);
+}
+
+@media (max-width: 640px) {
+  .grid-2, .grid-3, .grid-4 {
+    grid-template-columns: 1fr;
+  }
+  .container,
+  .health-banner {
+    padding-left: var(--gap-16);
+    padding-right: var(--gap-16);
+  }
+  .page-wrapper {
+    padding: var(--gap-20) var(--gap-16);
+  }
+  .navbar-inner {
+    flex-wrap: wrap;
+    height: auto;
+    padding: var(--gap-8) 0;
+  }
+  .nav-links {
+    order: 3;
+    width: 100%;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) {
+  .grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   13. TABLES — always scroll inside their own container on small screens
+   -------------------------------------------------------------------------- */
+.table-container {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background-color: var(--card);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.table th {
+  background-color: var(--bg);
+  padding: var(--gap-12) var(--gap-16);
+  font-size: var(--text-12);
+  font-weight: 500;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: var(--gap-12) var(--gap-16);
+  font-size: var(--text-14);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  line-height: 1.5;
+}
+
+.table tr:last-child td { border-bottom: none; }
+
+.table tbody tr:hover {
+  background-color: var(--track);
+}
+
+/* --------------------------------------------------------------------------
+   14. TOAST NOTIFICATIONS
+   -------------------------------------------------------------------------- */
+.toast-container {
+  position: fixed;
+  bottom: var(--gap-28);
+  right: var(--gap-28);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-8);
+}
+
+.toast {
+  padding: var(--gap-12) var(--gap-20);
+  border-radius: var(--radius-btn);
+  font-size: var(--text-14);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-8);
+  min-width: 220px;
+  animation: toastIn 0.2s ease-out;
+  border: 1px solid transparent;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.toast-success {
+  background-color: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--fill);
+}
+
+.toast-error {
+  background-color: var(--danger-bg);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.toast-info {
+  background-color: var(--card);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+/* --------------------------------------------------------------------------
+   15. MODAL
+   -------------------------------------------------------------------------- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);  /* neutral dim — no blur */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: var(--gap-16);
+}
+
+.modal-content {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  max-width: 520px;
+  width: 100%;
+  padding: var(--gap-28);
+  position: relative;
+  animation: modalIn 0.18s ease-out;
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.modal-close {
+  position: absolute;
+  top: var(--gap-16);
+  right: var(--gap-16);
+  background: none;
+  border: none;
+  font-size: var(--text-22);
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text-2);
+  transition: color 0.12s;
+}
+.modal-close:hover { color: var(--text); }
+
+/* --------------------------------------------------------------------------
+   16. SPACING UTILITIES
+   -------------------------------------------------------------------------- */
+.mt-1 { margin-top: var(--gap-4);  }
+.mt-2 { margin-top: var(--gap-8);  }
+.mt-4 { margin-top: var(--gap-16); }
+.mt-6 { margin-top: var(--gap-22); }
+.mt-8 { margin-top: var(--gap-28); }
+
+.mb-1 { margin-bottom: var(--gap-4);  }
+.mb-2 { margin-bottom: var(--gap-8);  }
+.mb-4 { margin-bottom: var(--gap-16); }
+.mb-6 { margin-bottom: var(--gap-22); }
+
+.text-muted { color: var(--text-2); font-size: var(--text-13); }

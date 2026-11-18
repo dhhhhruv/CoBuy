@@ -86,3 +86,15 @@ This document records all settled architectural, schema, and design decisions fo
 - **Target MOQ Snapshot:** `buying_pools.target_moq` is copied from `supplier_catalogue.min_order_qty` at pool creation to preserve historical integrity even if the supplier later adjusts their catalogue minimum.
 - **Current Quantity Running Total:** `buying_pools.current_qty` is maintained as a running sum updated inside an atomic transaction when micro-orders are placed, avoiding repeated `SUM()` table scans.
 
+---
+
+## 7. Frontend Architecture & Framework Selection (Debangshu)
+- **Decision:** React Single Page Application (SPA) bundled with Vite and styled with Tailwind CSS.
+- **Rationale:**
+  - **Component Reusability:** The CoBuy UI revolves around reusable, state-driven widgets such as the `MOQProgressBar`, `PoolCard`, `MicroOrderModal`, and `StatusBadge`. React's component hierarchy provides clean encapsulation for these units.
+  - **Reactive Calculations:** Calculating micro-order liabilities ($\text{Pledged Amount} = \text{Requested Quantity} \times \text{Price per Unit}$) and progress percentages ($\text{Progress} = \frac{\text{Current Qty}}{\text{Target MOQ}} \times 100$) requires reactive local UI state without page reloads.
+  - **Role-Based Routing:** Client-side routing seamlessly separates the `restaurant_owner` and `supplier` portals while sharing a unified auth state (`JWT` in `localStorage`).
+  - **Decoupled Architecture:** The frontend communicates strictly via standard RESTful JSON calls adhering to [`docs/API_CONTRACT.md`](API_CONTRACT.md), allowing Dhruv's database/auth and Shaaz's aggregation engine to evolve independently of the UI.
+- **Viva Defense:** *"We selected React with Vite because CoBuy's core user experience is centered on dynamic pool aggregation and interactive micro-order commitment. React's declarative component model reactively re-renders progress indicators and order totals without full page refreshes, and Vite offers lightning-fast builds with zero runtime overhead."*
+
+
