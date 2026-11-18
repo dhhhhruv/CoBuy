@@ -121,3 +121,24 @@
   - **Shaaz (Dev 2):** Database client is `prisma` (`src/db/prisma.js`). The 5 km discovery query is ready on `GET /api/pools/discover`.
   - **Debangshu (Dev 3):** Profile creation/view and pool discovery endpoints are live and require `Authorization: Bearer <token>`.
 - **How to run and test:** Run `npm test` to execute end-to-end suite across auth, profiles, and spatial discovery.
+
+
+---
+
+### Wed 18 Nov 2026 | Dev: Dhruv | Task: Days 9, 10, 12, 14 & 15 — Orders, History, Payments, Validation, Hardening & Final ER Specs
+
+- **What was built:** `src/orders/orderController.js`, `src/orders/orderRoutes.js`, `src/middleware/errorHandler.js`, `tests/negative_tests.js`, updated `src/app.js`, updated `package.json`, updated `docs/DECISIONS.md`.
+- **Schema or API changes:**
+  - Added `POST /api/orders`: Atomic micro-order placement inside Prisma transaction with 5 km radius check, `current_qty` increment, and automatic `FULFILLED` status transition.
+  - Added `GET /api/orders/my` & `GET /api/orders/my-orders`: Returns authenticated kitchen owner's micro-orders with pool & product metadata.
+  - Added `GET /api/orders/pool/:poolId`: Allows suppliers to audit all micro-orders placed in their pool.
+  - Added `PATCH /api/orders/:id/payment`: Updates micro-order payment status (`PENDING` $\rightarrow$ `PAID`) with RBAC and ownership authorization.
+  - Added `src/middleware/errorHandler.js`: Standard error envelope `{ success: false, error: { code, message, details }, timestamp }` and 404 handler for unmatched routes.
+  - Documented the final ER model, 7 cardinalities, and complete constraint catalog in `docs/DECISIONS.md`.
+  - Added Day 15 hardening suite in `tests/negative_tests.js`.
+- **Decisions made & why:** Encapsulated micro-order placement and running total increments inside an explicit database transaction to guarantee ACID atomicity and prevent the lost update anomaly. Built standardized error mapping to guarantee frontend consistency with `API_CONTRACT.md`.
+- **Open questions or blockers:** None. Dhruv's database, authentication, orders history, payment status, error handling, and testing responsibilities are 100% complete.
+- **What other devs must know:**
+  - **Shaaz (Dev 2):** Order creation and lifecycle transitions are fully wired on `POST /api/orders` and covered by end-to-end and negative tests.
+  - **Debangshu (Dev 3):** Endpoints `GET /api/orders/my` and `PATCH /api/orders/:id/payment` are live on the backend.
+- **How to run and test:** Run `npm test` and `npm run test:negative`.
