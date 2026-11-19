@@ -86,11 +86,11 @@ This document records all settled architectural, schema, and design decisions fo
 - **Target MOQ Snapshot:** `buying_pools.target_moq` is copied from `supplier_catalogue.min_order_qty` at pool creation to preserve historical integrity even if the supplier later adjusts their catalogue minimum.
 - **Current Quantity Running Total:** `buying_pools.current_qty` is maintained as a running sum updated inside an atomic transaction when micro-orders are placed, avoiding repeated `SUM()` table scans.
 
-## 7. Relational Model & The 7 Cardinalities (Day 14 Final Specification)
+## 7. Relational Model & The 8 Cardinalities (Day 14 Final Specification)
 
-CoBuy consists of 8 tables modeling the procurement lifecycle. Below is the exact cardinality breakdown and junction table justification for viva defense:
+CoBuy's core model consists of the 8 procurement tables specified in the project context, plus `refresh_tokens` added for rotating authentication tokens (9 tables total). Below is the exact cardinality breakdown and junction table justification for viva defense:
 
-### 7.1. The 7 Relationships & Cardinalities
+### 7.1. The 8 Relationships & Cardinalities
 1. **`users` 1 : N `user_roles`**
    - **Participation:** Mandatory on `user_roles` (cannot exist without a user), optional on `users` (during transitional signup).
    - **Rule:** A single user can hold one or multiple roles (`restaurant_owner`, `supplier`).
@@ -125,6 +125,12 @@ CoBuy consists of 8 tables modeling the procurement lifecycle. Below is the exac
    - **Participation:** Mandatory on `micro_orders` (each micro-order must specify both a pool and a restaurant).
    - **Rule:** Resolves the Many-to-Many relationship between `buying_pools` and `restaurants`.
    - **Composite Constraint:** `UNIQUE(pool_id, restaurant_id)` enforces that a kitchen participates at most once per buying pool.
+
+8. **`users` 1 : N `refresh_tokens`**
+   - **Participation:** Optional on `users` (a user with no active session has no row); mandatory on `refresh_tokens`.
+   - **Rule:** One account can hold several concurrent refresh tokens (one per device/session). Revoking one session does not sign the user out everywhere.
+   - **FK:** `refresh_tokens.user_id` $\rightarrow$ `users.user_id` (`ON DELETE CASCADE`).
+   - **Viva Note:** This is an authentication extension, not part of the eight-table procurement model. It stores only the SHA-256 hash of each token, never the raw token.
 
 ### 7.2. The Two Junction Tables Resolving Many-to-Many Relationships
 1. **`user_roles`**: Resolves Many-to-Many between `users` and abstract system roles. Composite Primary Key `(user_id, role_name)` prevents duplicate assignments.

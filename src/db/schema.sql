@@ -4,7 +4,7 @@
 -- Owner: Dhruv (Database & Auth)
 -- 
 -- Normalization: Fully normalized to 3NF / BCNF.
--- All 8 tables, primary keys, foreign keys, constraints, and spatial indexes.
+-- 9 tables: the 8 core procurement tables plus refresh_tokens (auth extension).
 -- ============================================================================
 
 -- Ensure the database exists and set the default database

@@ -195,3 +195,14 @@
 - **Open questions or blockers:** Existing pledges cannot be increased (would need an update endpoint); documented as a limitation.
 - **What other devs must know:** `npm run test:all` covers every suite; concurrency test asserts 350 + 100 + 100 = 550 kg and shows the naive version recording only 100 kg.
 - **How to run and test:** `npm run test:concurrency`, `npm run test:aggregation`, `npm run test:demo`, `npm run test:all`.
+
+---
+
+### Thu 19 Nov 2026 | Dev: Dhruv | Task: Days 6, 14, 16-17 (backfilled) — Profile CRUD, 9-table reconciliation, viva/demo prep
+
+- **What was built:** `PATCH`/`DELETE` for `/api/restaurants/:id` and `/api/suppliers/:id`, `tests/profile_crud_test.js`, `docs/DEMO_SCRIPT.md`, expanded `docs/VIVA_NOTES.md` auth/DB drill. Updated `docs/ER_DIAGRAM.md`, `docs/PROJECT_CONTEXT.md` (addendum), `docs/DECISIONS.md`, `docs/API_CONTRACT.md`, `README.md`, `src/db/migrate.js` and `src/db/schema.sql` for the ninth table.
+- **Schema or API changes:** Added profile update/delete endpoints with ownership checks; deletions return `409 RESTAURANT_IN_USE` / `409 SUPPLIER_IN_USE` when orders or offers still reference the profile. No DDL change.
+- **Decisions made & why:** Kept `refresh_tokens` as a documented auth extension rather than deleting working OAuth; ER and viva notes now present the model as 8 procurement tables + 1 auth table (9 total, 8 relationships). Corrected the ER draft's claim that `products.product_name` is unique.
+- **Open questions or blockers:** None.
+- **What other devs must know:** `npm run test:profiles` covers the new endpoints; the frontend profile forms can now call `PATCH` instead of remaining UI-only.
+- **How to run and test:** `npm run test:profiles`, then `npm run test:all`.

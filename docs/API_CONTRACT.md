@@ -570,7 +570,11 @@ Codes: `INVALID_QUANTITY`, `POOL_EXPIRED`, `CLUSTER_PROXIMITY_EXCEEDED`.
 |---|---|---|---|---|
 | `POST` | `/api/restaurants` | Dhruv | Create cloud kitchen profile with location | Implemented |
 | `GET` | `/api/restaurants/me` | Dhruv | Get current user's kitchen profile | Implemented |
+| `PATCH` | `/api/restaurants/:id` | Dhruv | Update own kitchen profile / location | Implemented |
+| `DELETE` | `/api/restaurants/:id` | Dhruv | Delete own unused kitchen profile | Implemented |
 | `POST` | `/api/suppliers` | Dhruv | Create supplier company profile | Implemented |
+| `PATCH` | `/api/suppliers/:id` | Dhruv | Update own company profile / warehouse | Implemented |
+| `DELETE` | `/api/suppliers/:id` | Dhruv | Delete own supplier profile without offers | Implemented |
 | `GET` | `/api/products` | Shaaz | List base products | Implemented |
 | `POST` | `/api/products` | Shaaz | Add a base product definition | Implemented |
 | `GET` | `/api/catalogue` | Shaaz | List supplier offers | Implemented |

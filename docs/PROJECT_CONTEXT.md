@@ -747,3 +747,40 @@ The most important thing to understand about CoBuy is that it is not merely a co
 A supplier offers a product → kitchens discover a suitable pool → restaurants contribute micro-orders → CoBuy aggregates the quantities → the collective order reaches the supplier's MOQ.
 If you can explain that process and justify the database design supporting it, you understand the project rather than merely remembering its diagram.
 
+
+---
+
+## 10. Implementation Addendum (19 Nov 2026)
+
+This section records deliberate extensions made during implementation; the
+original design above remains the source of truth for the eight procurement
+tables.
+
+### 10.1 Why the running schema has nine tables
+
+`REFRESH_TOKENS(token_id, user_id, token_hash, expires_at, revoked, created_at)`
+was added for dual-token authentication:
+
+- `JWT` access tokens expire after 15 minutes.
+- Refresh tokens (7 days) are opaque random values; only their SHA-256 hash is stored.
+- Rotation invalidates the old refresh token on every exchange, and logout revokes it.
+- `user_id` references `USERS(user_id)` with `ON DELETE CASCADE`.
+
+This is an authentication concern, not a change to the procurement model. The
+eight tables — `USERS`, `USER_ROLES`, `RESTAURANTS`, `SUPPLIERS`, `PRODUCTS`,
+`SUPPLIER_CATALOGUE`, `BUYING_POOLS`, `MICRO_ORDERS` — are unchanged, and the
+seven procurement relationships still hold exactly as documented in sections
+6 and 7 above. The full model is therefore 9 tables and 8 relationships
+(the extra relationship is `USERS 1:N REFRESH_TOKENS`).
+
+**Viva phrasing:** "The procurement model is the eight-table design. We added
+one authentication table for refresh-token rotation; it participates in no
+procurement relationship."
+
+### 10.2 Other settled implementation details
+
+- A pool is created by a supplier from one of its own catalogue offers.
+- Overfill is allowed; the surplus is reported as `overfillBy`.
+- Pool expiry is a lazy sweep on read/order, guarded by `status = 'ACTIVE'`.
+- `POST /api/orders` takes a row lock (`SELECT ... FOR UPDATE`) before
+  validating and updating the pool.

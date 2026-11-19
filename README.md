@@ -106,7 +106,7 @@ flowchart TD
 
 ## 5. Database Design (The 8 Relations)
 
-The schema is in Boyce-Codd Normal Form (BCNF) across 8 tables:
+The schema is in Boyce-Codd Normal Form (BCNF) across 9 tables — the 8 core procurement relations plus `REFRESH_TOKENS` for rotating auth tokens:
 
 | Table | Primary Key | Purpose | Key Relationships / Constraints |
 |---|---|---|---|
@@ -236,3 +236,4 @@ again before a demo without duplicating data or wiping orders.
 - `docs/NORMALIZATION.md` — UNF to 4NF with CoBuy examples, plus transactions
 - `docs/ORDER_FLOW_SQL.md` — the order flow in plain SQL
 - `docs/VIVA_NOTES.md` — aggregation Q&A, swap areas, honest limitations
+- `docs/DEMO_SCRIPT.md` — timed 7-minute demo run and fallbacks

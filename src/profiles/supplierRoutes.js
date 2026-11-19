@@ -13,6 +13,10 @@ const { authenticate, requireRole } = require('../auth/authMiddleware');
 router.post('/', authenticate, requireRole(['supplier']), supplierController.createSupplier);
 router.get('/me', authenticate, requireRole(['supplier']), supplierController.getMySupplier);
 
+// Owner-only profile maintenance. The controller re-checks ownership.
+router.patch('/:id', authenticate, requireRole(['supplier']), supplierController.updateSupplier);
+router.delete('/:id', authenticate, requireRole(['supplier']), supplierController.deleteSupplier);
+
 // Public/Authenticated: View a specific supplier company by ID
 router.get('/:id', supplierController.getSupplierById);
 

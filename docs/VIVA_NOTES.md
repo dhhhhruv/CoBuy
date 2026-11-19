@@ -97,12 +97,55 @@ existing offer.
 ## B. Swap areas (what each developer should still be able to explain)
 
 ### B1. Database and authentication (Dhruv)
-- UUID primary keys: stable across systems, not user-editable, safe to expose; larger than integers is the accepted cost.
-- `DECIMAL(10,2)` for money: binary floats cannot represent 0.10 exactly.
-- Roles live in `USER_ROLES` because a user can hold both roles; a column would be a repeating group.
-- Passwords are bcrypt hashes with a per-password salt; hashes are one-way, encryption is reversible and therefore wrong here.
-- JWT access token (15 min) plus a rotating refresh token whose SHA-256 hash is stored; rotation limits replay after theft.
-- `owner_id` and `supplier_id` come from the verified token, never the request body.
+
+**Why UUID primary keys?** They are stable, system-generated, not user-editable,
+and safe to expose in URLs. The cost is 16 bytes instead of 4–8; with InnoDB that
+is an acceptable price for immutability.
+
+**Why `DECIMAL(10,2)` for money?** Binary floating point cannot represent `0.10`
+exactly, so totals drift (₹99.999999). `DECIMAL` is fixed-point and exact.
+
+**Why are roles in `USER_ROLES` and not a column on `USERS`?** A user may be both
+a kitchen owner and a supplier. A multi-valued column violates 1NF; the junction
+table with composite key `(user_id, role_name)` removes the repeating group and
+makes "does this user have role X" an indexed lookup.
+
+**Hashing versus encryption?** Passwords must be one-way. bcrypt is a salted,
+adaptive hash: the same password yields different hashes, and the work factor
+makes offline guessing expensive. Encryption would be reversible with the key,
+which is exactly what we must avoid.
+
+**Why dual tokens?** A short-lived JWT access token (15 min) limits the damage if
+it leaks. The refresh token (7 days) is opaque and stored only as a SHA-256 hash,
+so a database dump cannot be replayed. Every refresh rotates the token, so an old
+token stops working once used.
+
+**Why does `owner_id` come from the JWT and not the body?** Otherwise any
+authenticated user could create or edit a profile on behalf of another owner just
+by sending their id. The token is the only trusted identity source.
+
+**Why `ON DELETE RESTRICT` almost everywhere?** Deleting a user, restaurant,
+supplier, product or offer that has history would destroy an audit trail or
+silently remove related records. `RESTRICT` forces an explicit decision. The two
+exceptions are `USER_ROLES` and `REFRESH_TOKENS`, which are `CASCADE` because they
+exist only to serve the user.
+
+**Why does the schema have nine tables when the context says eight?** The eight
+procurement tables are unchanged. `REFRESH_TOKENS` is an authentication
+side-table with one relationship, `USERS 1:N REFRESH_TOKENS`, and no role in
+procurement. Phrase it that way rather than claiming the design always had nine.
+
+**Why is `PRODUCTS.product_name` not unique?** "Cooking Oil" can exist in litres
+and "Tomatoes" in kilograms; uniqueness is a business rule we enforce at the API
+when creating a product (same name + same unit reuses the row), not a schema
+constraint that could block a legitimate second unit.
+
+**What do the profile endpoints enforce?** `PATCH`/`DELETE` on
+`/api/restaurants/:id` and `/api/suppliers/:id` require the JWT role *and* that
+the row belongs to the caller (`owner_id` / `user_id`). A profile referenced by
+orders or catalogue offers cannot be deleted: `409 RESTAURANT_IN_USE` or
+`409 SUPPLIER_IN_USE`, mirroring the database's `RESTRICT` rule with a readable
+error instead of a raw foreign-key failure.
 
 ### B2. Frontend (Debangshu)
 - Single-page app with hash routing; role guards redirect between kitchen and supplier routes.
