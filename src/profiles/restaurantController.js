@@ -192,9 +192,200 @@ async function getRestaurantById(req, res) {
   }
 }
 
+/**
+ * PATCH /api/restaurants/:id
+ * Owner-only partial update. Scalar fields go through Prisma; the POINT column
+ * is rewritten with ST_GeomFromText so SRID 4326 is preserved.
+ */
+async function updateRestaurant(req, res, next) {
+  const { id } = req.params;
+  const { businessName, addressText, walletBalance, latitude, longitude } = req.body;
+
+  try {
+    const existing = await prisma.restaurants.findUnique({ where: { restaurant_id: id } });
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'RESTAURANT_NOT_FOUND', message: `Restaurant with ID '${id}' was not found` },
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Authorization: ownership comes from the JWT, never from the body.
+    if (existing.owner_id !== req.user.userId) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'You can only edit your own kitchen profile.' },
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const data = {};
+
+    if (businessName !== undefined) {
+      if (typeof businessName !== 'string' || businessName.trim().length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'Business name cannot be empty' },
+          timestamp: new Date().toISOString()
+        });
+      }
+      data.business_name = businessName.trim();
+    }
+
+    if (addressText !== undefined) {
+      data.address_text = addressText === null ? null : String(addressText).trim();
+    }
+
+    if (walletBalance !== undefined) {
+      const balance = Number(walletBalance);
+      if (!Number.isFinite(balance) || balance < 0) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'walletBalance must be zero or greater' },
+          timestamp: new Date().toISOString()
+        });
+      }
+      data.wallet_balance = balance;
+    }
+
+    const hasLat = latitude !== undefined;
+    const hasLng = longitude !== undefined;
+    if (hasLat !== hasLng) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_COORDINATES', message: 'Supply both latitude and longitude, or neither.' },
+        timestamp: new Date().toISOString()
+      });
+    }
+    let coords = null;
+    if (hasLat && hasLng) {
+      const coordCheck = validateCoordinates(latitude, longitude);
+      if (!coordCheck.valid) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_COORDINATES', message: coordCheck.error },
+          timestamp: new Date().toISOString()
+        });
+      }
+      coords = coordCheck;
+    }
+
+    if (Object.keys(data).length === 0 && !coords) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'No updatable fields supplied' },
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    if (Object.keys(data).length > 0) {
+      await prisma.restaurants.update({ where: { restaurant_id: id }, data });
+    }
+
+    if (coords) {
+      const pointWkt = formatPointWKT(coords.lng, coords.lat);
+      await prisma.$executeRaw`
+        UPDATE restaurants
+        SET location_coord = ST_GeomFromText(${pointWkt}, 4326)
+        WHERE restaurant_id = ${id}
+      `;
+    }
+
+    // Re-read through the spatial projection so the response matches GET /me.
+    const rows = await prisma.$queryRaw`
+      SELECT
+        restaurant_id AS restaurantId,
+        owner_id AS ownerId,
+        business_name AS businessName,
+        ST_X(location_coord) AS longitude,
+        ST_Y(location_coord) AS latitude,
+        wallet_balance AS walletBalance,
+        address_text AS addressText
+      FROM restaurants
+      WHERE restaurant_id = ${id}
+      LIMIT 1
+    `;
+    const r = rows[0];
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        restaurantId: r.restaurantId,
+        ownerId: r.ownerId,
+        businessName: r.businessName,
+        location: { latitude: Number(r.latitude), longitude: Number(r.longitude) },
+        walletBalance: Number(r.walletBalance).toFixed(2),
+        addressText: r.addressText
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+/**
+ * DELETE /api/restaurants/:id
+ * Owner-only. Refused with 409 while micro-orders still reference the kitchen
+ * (fk_orders_restaurant is ON DELETE RESTRICT).
+ */
+async function deleteRestaurant(req, res, next) {
+  const { id } = req.params;
+
+  try {
+    const existing = await prisma.restaurants.findUnique({ where: { restaurant_id: id } });
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'RESTAURANT_NOT_FOUND', message: `Restaurant with ID '${id}' was not found` },
+        timestamp: new Date().toISOString()
+      });
+    }
+    if (existing.owner_id !== req.user.userId) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'You can only delete your own kitchen profile.' },
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const orderCount = await prisma.micro_orders.count({ where: { restaurant_id: id } });
+    if (orderCount > 0) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'RESTAURANT_IN_USE',
+          message: `Cannot delete profile: ${orderCount} micro-order(s) reference this kitchen.`
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    await prisma.restaurants.delete({ where: { restaurant_id: id } });
+
+    return res.status(200).json({
+      success: true,
+      data: { restaurantId: id, deleted: true },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    if (error && error.code === 'P2003') {
+      return res.status(409).json({
+        success: false,
+        error: { code: 'RESTAURANT_IN_USE', message: 'This kitchen profile is still referenced by micro-orders.' },
+        timestamp: new Date().toISOString()
+      });
+    }
+    return next(error);
+  }
+}
+
 module.exports = {
   createRestaurant,
   getMyRestaurants,
-  getRestaurantById
+  getRestaurantById,
+  updateRestaurant,
+  deleteRestaurant
 };
 

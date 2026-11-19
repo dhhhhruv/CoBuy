@@ -86,11 +86,11 @@ This document records all settled architectural, schema, and design decisions fo
 - **Target MOQ Snapshot:** `buying_pools.target_moq` is copied from `supplier_catalogue.min_order_qty` at pool creation to preserve historical integrity even if the supplier later adjusts their catalogue minimum.
 - **Current Quantity Running Total:** `buying_pools.current_qty` is maintained as a running sum updated inside an atomic transaction when micro-orders are placed, avoiding repeated `SUM()` table scans.
 
-## 7. Relational Model & The 7 Cardinalities (Day 14 Final Specification)
+## 7. Relational Model & The 8 Cardinalities (Day 14 Final Specification)
 
-CoBuy consists of 8 tables modeling the procurement lifecycle. Below is the exact cardinality breakdown and junction table justification for viva defense:
+CoBuy's core model consists of the 8 procurement tables specified in the project context, plus `refresh_tokens` added for rotating authentication tokens (9 tables total). Below is the exact cardinality breakdown and junction table justification for viva defense:
 
-### 7.1. The 7 Relationships & Cardinalities
+### 7.1. The 8 Relationships & Cardinalities
 1. **`users` 1 : N `user_roles`**
    - **Participation:** Mandatory on `user_roles` (cannot exist without a user), optional on `users` (during transitional signup).
    - **Rule:** A single user can hold one or multiple roles (`restaurant_owner`, `supplier`).
@@ -126,6 +126,12 @@ CoBuy consists of 8 tables modeling the procurement lifecycle. Below is the exac
    - **Rule:** Resolves the Many-to-Many relationship between `buying_pools` and `restaurants`.
    - **Composite Constraint:** `UNIQUE(pool_id, restaurant_id)` enforces that a kitchen participates at most once per buying pool.
 
+8. **`users` 1 : N `refresh_tokens`**
+   - **Participation:** Optional on `users` (a user with no active session has no row); mandatory on `refresh_tokens`.
+   - **Rule:** One account can hold several concurrent refresh tokens (one per device/session). Revoking one session does not sign the user out everywhere.
+   - **FK:** `refresh_tokens.user_id` $\rightarrow$ `users.user_id` (`ON DELETE CASCADE`).
+   - **Viva Note:** This is an authentication extension, not part of the eight-table procurement model. It stores only the SHA-256 hash of each token, never the raw token.
+
 ### 7.2. The Two Junction Tables Resolving Many-to-Many Relationships
 1. **`user_roles`**: Resolves Many-to-Many between `users` and abstract system roles. Composite Primary Key `(user_id, role_name)` prevents duplicate assignments.
 2. **`supplier_catalogue`**: Resolves Many-to-Many between `suppliers` and `products`. An independent primary key `catalogue_id` is used with a composite unique key `UNIQUE(supplier_id, product_id)` to ensure a supplier does not create redundant duplicate pricing records for the same base ingredient.
@@ -159,3 +165,53 @@ CoBuy consists of 8 tables modeling the procurement lifecycle. Below is the exac
 | `micro_orders` | `uq_orders_pool_restaurant` | Composite UNIQUE | `(pool_id, restaurant_id)` | One micro-order per restaurant per buying pool |
 | `micro_orders` | `chk_orders_qty` | CHECK | `requested_qty > 0` | Prevents zero or negative micro-order pledges |
 | `micro_orders` | `chk_orders_payment`| CHECK | `payment_status IN ('PENDING','PAID')` | Enforces financial settlement state domain |
+| `refresh_tokens` | `PRIMARY` | PK | `token_id` | UUIDv4 identifier |
+| `refresh_tokens` | `uq_refresh_tokens_hash` | UNIQUE | `token_hash` | SHA-256 hashed refresh token lookup |
+| `refresh_tokens` | `fk_refresh_tokens_user` | FK | `user_id` $\rightarrow$ `users.user_id` | `ON DELETE CASCADE` revokes active tokens if account is deleted |
+
+---
+
+## 9. Dual-Token Authentication
+
+- **Architecture:** Dual-token model combining ephemeral JWT Access Tokens (15-minute expiration) with stateful, rotating Refresh Tokens (7-day expiration).
+- **Refresh Token Storage & Security:**
+  - Refresh tokens are generated as 64-character cryptographically secure random values.
+  - Only the **SHA-256 hash** of the refresh token is stored in the `refresh_tokens` table. In the event of a database breach, plain refresh tokens cannot be harvested.
+  - **Token Rotation:** Every `/api/users/refresh` exchange invalidates the supplied refresh token and issues a fresh pair. Replaying an old or revoked token triggers a 401 rejection.
+  - **Revocation on Logout:** `/api/users/logout` flags the token as `revoked = true` in MySQL.
+## 10. OAuth2 / OpenID Connect (OIDC) Integration
+
+**Scope:**
+  - Standard Authorization Code grant requesting `openid email profile` scopes.
+  - Supports Google Identity Services and generic OIDC providers.
+  - **Just-In-Time (JIT) Provisioning:** Users signing in via OIDC are automatically provisioned in `users` and assigned their requested role in `user_roles` within an atomic transaction.
+  - **Offline / Viva Resilience:** Includes a deterministic mock OIDC mode (`/api/users/oauth/mock` and simulated callback) ensuring offline tests and viva presentations run reliably without depending on live external internet connectivity or Google Cloud secrets.
+
+---
+
+## 11. Pool Ownership, Overfill and Expiry (Settled Day 1, Implemented Day 12)
+
+These close the open questions in section 2 of the 20-day plan.
+
+### 11.1 Decision 4: who creates a buying pool
+- **Decision:** A supplier opens a pool from one of its own `supplier_catalogue` offers (`POST /api/pools`). Kitchens only discover and join.
+- **Rationale:** Only the supplier knows the MOQ it will serve and the cluster it can deliver to. Allowing kitchens to open pools would let a kitchen invent a target the supplier never agreed to.
+- **Authorization:** `supplier` role + `supplier_catalogue.supplier_id` must belong to the authenticated user's supplier profile.
+
+### 11.2 Decision 6: an order larger than the remaining quantity
+- **Decision:** Overfill is **allowed**. The pool aggregates the full pledged quantity, transitions to `FULFILLED`, and the order response reports `overfillBy` (surplus over `target_moq`).
+- **Rationale:** The MOQ is a supplier minimum, not a maximum. Rejecting a pledge because another kitchen arrived first makes the outcome timing-dependent, and the plan's own concurrency example (350 kg + 100 kg + 100 kg) requires overfill to be legal.
+- **Alternative rejected:** rejecting the whole order, or partially accepting only the remainder, both add a second fulfilment concept for no business benefit.
+- **Frontend contract:** `progressPercentage` is capped at 100; `overfillBy > 0` can be shown as a warning.
+
+### 11.3 Decision 7: pool statuses and expiry
+- **Statuses:** `ACTIVE`, `FULFILLED`, `EXPIRED`, `CANCELLED` (enforced by `chk_pools_status`).
+- **Transitions:** only `ACTIVE -> FULFILLED | EXPIRED | CANCELLED`. The other three are terminal. Illegal transitions return `409 INVALID_STATUS_TRANSITION`.
+- **Expiry:** lazy sweep, not a scheduled job. `expireStalePools()` runs before discovery, listing, pool detail and order placement, guarded by `status = 'ACTIVE'` so a fulfilled pool is never reclassified.
+- **Clock rule:** all expiry comparisons use epoch seconds (`UNIX_TIMESTAMP`) against `Date.now()`, because MySQL returns `TIMESTAMP` values as local wall-clock time and Node reads the machine clock as UTC (a 5.5-hour skew on IST).
+
+### 11.4 Decision 8: payment status (confirmation)
+- `payment_status` is `PENDING` or `PAID`, changed through `PATCH /api/orders/:id/payment` by the restaurant owner or the pool's supplier.
+- There is no gateway, refund or wallet movement; `wallet_balance` remains a stored figure only.
+
+---

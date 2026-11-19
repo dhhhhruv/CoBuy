@@ -35,7 +35,7 @@ async function runMigration() {
     await adminConnection.query(sqlScript);
 
     console.log('[Migration] ✅ Schema migration completed successfully!');
-    console.log('[Migration] Created 8 tables: users, user_roles, restaurants, suppliers, products, supplier_catalogue, buying_pools, micro_orders.');
+    console.log('[Migration] Created 9 tables: users, user_roles, refresh_tokens, restaurants, suppliers, products, supplier_catalogue, buying_pools, micro_orders.');
   } catch (error) {
     console.error('[Migration] ❌ Migration failed with error:');
     console.error(error.message);

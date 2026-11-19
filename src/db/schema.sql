@@ -4,7 +4,7 @@
 -- Owner: Dhruv (Database & Auth)
 -- 
 -- Normalization: Fully normalized to 3NF / BCNF.
--- All 8 tables, primary keys, foreign keys, constraints, and spatial indexes.
+-- 9 tables: the 8 core procurement tables plus refresh_tokens (auth extension).
 -- ============================================================================
 
 -- Ensure the database exists and set the default database
@@ -17,6 +17,7 @@ USE cobuy_db;
 -- ----------------------------------------------------------------------------
 -- Safe Teardown: Drop in reverse dependency order (children before parents)
 -- ----------------------------------------------------------------------------
+DROP TABLE IF EXISTS refresh_tokens;
 DROP TABLE IF EXISTS micro_orders;
 DROP TABLE IF EXISTS buying_pools;
 DROP TABLE IF EXISTS supplier_catalogue;
@@ -61,6 +62,27 @@ CREATE TABLE user_roles (
     REFERENCES users (user_id)
     ON DELETE CASCADE, -- If user is deleted, their role assignments are removed
   CONSTRAINT chk_user_roles_name CHECK (role_name IN ('restaurant_owner', 'supplier'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================================
+-- 2b. REFRESH_TOKENS Table
+-- Implements OAuth2 / OIDC token rotation & session management.
+-- Stores cryptographically hashed refresh tokens with expiration and revocation flags.
+-- ============================================================================
+CREATE TABLE refresh_tokens (
+  token_id CHAR(36) NOT NULL,
+  user_id CHAR(36) NOT NULL,
+  token_hash VARCHAR(255) NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  revoked BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT pk_refresh_tokens PRIMARY KEY (token_id),
+  CONSTRAINT uq_refresh_tokens_hash UNIQUE (token_hash),
+  CONSTRAINT fk_refresh_tokens_user FOREIGN KEY (user_id)
+    REFERENCES users (user_id)
+    ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 

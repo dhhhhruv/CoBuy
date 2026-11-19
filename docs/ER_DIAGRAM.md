@@ -11,6 +11,7 @@
 ```mermaid
 erDiagram
     USERS ||--o{ USER_ROLES : "holds (1:N)"
+    USERS ||--o{ REFRESH_TOKENS : "sessions (1:N)"
     USERS ||--o{ RESTAURANTS : "owns (1:N)"
     USERS ||--o{ SUPPLIERS : "operates (1:N)"
     
@@ -35,6 +36,15 @@ erDiagram
         varchar role_name PK "restaurant_owner | supplier"
     }
 
+    REFRESH_TOKENS {
+        char(36) token_id PK "UUID"
+        char(36) user_id FK "CASCADE on delete"
+        varchar token_hash UK "SHA-256 of raw token"
+        timestamp expires_at
+        boolean revoked "default false"
+        timestamp created_at
+    }
+
     RESTAURANTS {
         char(36) restaurant_id PK "UUID"
         char(36) owner_id FK "RESTRICT on delete"
@@ -54,7 +64,7 @@ erDiagram
 
     PRODUCTS {
         char(36) product_id PK "UUID"
-        varchar product_name UK
+        varchar product_name "not unique: same name may exist in another unit"
         varchar unit_of_measure "e.g. kg, litre"
         varchar category
     }
@@ -95,6 +105,7 @@ erDiagram
 | Relationship | Cardinality | Participation | Foreign Key & Referential Action | Real-World Domain Meaning |
 |---|:---:|:---:|---|---|
 | `USERS` $\to$ `USER_ROLES` | **1 : N** | Mandatory (User must have $\ge 1$ role) | `user_id` $\to$ `users(user_id)` (`ON DELETE CASCADE`) | Resolves multi-role membership (kitchen owner, supplier, or both). |
+| `USERS` $\to$ `REFRESH_TOKENS` | **1 : N** | Optional | `user_id` $\to$ `users(user_id)` (`ON DELETE CASCADE`) | One row per active session; only the token hash is stored, enabling per-device revocation. |
 | `USERS` $\to$ `RESTAURANTS` | **1 : N** | Optional | `owner_id` $\to$ `users(user_id)` (`ON DELETE RESTRICT`) | A user can own one or more cloud kitchens. |
 | `USERS` $\to$ `SUPPLIERS` | **1 : N** | Optional | `user_id` $\to$ `users(user_id)` (`ON DELETE RESTRICT`) | Links login credentials to a company supplier profile. |
 | `SUPPLIERS` $\leftrightarrow$ `PRODUCTS` | **M : N** | Optional on both sides | Resolved by `SUPPLIER_CATALOGUE` with `UNIQUE(supplier_id, product_id)` | A supplier offers multiple products; a product has multiple wholesale suppliers. |

@@ -13,6 +13,10 @@ const { authenticate, requireRole } = require('../auth/authMiddleware');
 router.post('/', authenticate, requireRole(['restaurant_owner']), restaurantController.createRestaurant);
 router.get('/me', authenticate, requireRole(['restaurant_owner']), restaurantController.getMyRestaurants);
 
+// Owner-only profile maintenance. The controller re-checks ownership.
+router.patch('/:id', authenticate, requireRole(['restaurant_owner']), restaurantController.updateRestaurant);
+router.delete('/:id', authenticate, requireRole(['restaurant_owner']), restaurantController.deleteRestaurant);
+
 // Public/Authenticated: View a specific restaurant by ID
 router.get('/:id', restaurantController.getRestaurantById);
 

@@ -6,6 +6,7 @@
 
 const prisma = require('../db/prisma');
 const { validateCoordinates, formatPointWKT } = require('../utils/geoUtils');
+const lifecycle = require('./poolLifecycle');
 
 /**
  * Discovers active buying pools within a specified radius (default 5,000 metres)
@@ -22,6 +23,13 @@ async function discoverNearbyPools(req, res) {
   const targetStatus = typeof status === 'string' ? status.toUpperCase() : 'ACTIVE';
 
   try {
+    // Expiry policy (Decision 7): lazily close stale pools when reading them.
+    await lifecycle.expireStalePools(prisma);
+
+    // Expiry is compared as epoch seconds so the result is independent of the
+    // MySQL session timezone (TIMESTAMP columns are read back as local
+    // wall-clock time, which JS would otherwise misinterpret as UTC).
+    const nowEpochSeconds = Math.floor(Date.now() / 1000);
     let pools = [];
 
     // Mode 1: Discovery based on an existing restaurant ID
@@ -32,7 +40,7 @@ async function discoverNearbyPools(req, res) {
           bp.status,
           bp.current_qty AS currentQty,
           bp.target_moq AS targetMoq,
-          bp.expiration_time AS expirationTime,
+          UNIX_TIMESTAMP(bp.expiration_time) AS expirationEpoch,
           ST_X(bp.geographic_zone) AS poolLongitude,
           ST_Y(bp.geographic_zone) AS poolLatitude,
           ROUND(ST_Distance_Sphere(r.location_coord, bp.geographic_zone), 1) AS distanceMeters,
@@ -51,7 +59,7 @@ async function discoverNearbyPools(req, res) {
         JOIN suppliers s ON sc.supplier_id = s.supplier_id
         JOIN restaurants r ON r.restaurant_id = ${restaurantId}
         WHERE bp.status = ${targetStatus}
-          AND bp.expiration_time > NOW()
+          AND UNIX_TIMESTAMP(bp.expiration_time) > ${nowEpochSeconds}
           AND ST_Distance_Sphere(r.location_coord, bp.geographic_zone) <= ${maxRadiusMeters}
         ORDER BY distanceMeters ASC
       `;
@@ -78,7 +86,7 @@ async function discoverNearbyPools(req, res) {
           bp.status,
           bp.current_qty AS currentQty,
           bp.target_moq AS targetMoq,
-          bp.expiration_time AS expirationTime,
+          UNIX_TIMESTAMP(bp.expiration_time) AS expirationEpoch,
           ST_X(bp.geographic_zone) AS poolLongitude,
           ST_Y(bp.geographic_zone) AS poolLatitude,
           ROUND(ST_Distance_Sphere(ST_GeomFromText(${pointWkt}, 4326), bp.geographic_zone), 1) AS distanceMeters,
@@ -96,7 +104,7 @@ async function discoverNearbyPools(req, res) {
         JOIN products p ON sc.product_id = p.product_id
         JOIN suppliers s ON sc.supplier_id = s.supplier_id
         WHERE bp.status = ${targetStatus}
-          AND bp.expiration_time > NOW()
+          AND UNIX_TIMESTAMP(bp.expiration_time) > ${nowEpochSeconds}
           AND ST_Distance_Sphere(ST_GeomFromText(${pointWkt}, 4326), bp.geographic_zone) <= ${maxRadiusMeters}
         ORDER BY distanceMeters ASC
       `;
@@ -127,7 +135,7 @@ async function discoverNearbyPools(req, res) {
           bp.status,
           bp.current_qty AS currentQty,
           bp.target_moq AS targetMoq,
-          bp.expiration_time AS expirationTime,
+          UNIX_TIMESTAMP(bp.expiration_time) AS expirationEpoch,
           ST_X(bp.geographic_zone) AS poolLongitude,
           ST_Y(bp.geographic_zone) AS poolLatitude,
           ROUND(ST_Distance_Sphere(r.location_coord, bp.geographic_zone), 1) AS distanceMeters,
@@ -146,7 +154,7 @@ async function discoverNearbyPools(req, res) {
         JOIN suppliers s ON sc.supplier_id = s.supplier_id
         JOIN restaurants r ON r.restaurant_id = ${defaultRestaurantId}
         WHERE bp.status = ${targetStatus}
-          AND bp.expiration_time > NOW()
+          AND UNIX_TIMESTAMP(bp.expiration_time) > ${nowEpochSeconds}
           AND ST_Distance_Sphere(r.location_coord, bp.geographic_zone) <= ${maxRadiusMeters}
         ORDER BY distanceMeters ASC
       `;
@@ -165,7 +173,6 @@ async function discoverNearbyPools(req, res) {
     const formatted = pools.map(row => {
       const currentQty = Number(row.currentQty);
       const targetMoq = Number(row.targetMoq);
-      const progress = targetMoq > 0 ? (currentQty / targetMoq) * 100 : 0;
 
       return {
         poolId: row.poolId,
@@ -183,8 +190,8 @@ async function discoverNearbyPools(req, res) {
         pricePerUnit: Number(row.pricePerUnit),
         targetMoq,
         currentQty,
-        progressPercentage: Number(progress.toFixed(1)),
-        expirationTime: row.expirationTime ? row.expirationTime.toISOString() : null,
+        progressPercentage: lifecycle.progressPercentage(currentQty, targetMoq),
+        expirationTime: row.expirationEpoch ? new Date(Number(row.expirationEpoch) * 1000).toISOString() : null,
         distanceMeters: Number(row.distanceMeters),
         isEligible: Number(row.distanceMeters) <= maxRadiusMeters
       };
