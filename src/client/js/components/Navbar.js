@@ -1,64 +1,93 @@
 // ============================================================================
 // File: src/client/js/components/Navbar.js
 // Owner: Debangshu (Frontend Lead)
-// Purpose: Main persistent navigation bar with dynamic role switching & auth state
+// Purpose: Role-aware navigation, session identity, logout and theme switch.
 // ============================================================================
 
 import { store } from '../state.js';
 import { api } from '../api/client.js';
+import { showToast } from './Toast.js';
+
+const ROLE_LABELS = {
+  restaurant_owner: 'Cloud Kitchen',
+  supplier: 'Supplier'
+};
+
+const ROLE_BADGES = {
+  restaurant_owner: 'badge-role-kitchen',
+  supplier: 'badge-role-supplier'
+};
+
+const NAV_LINKS = {
+  restaurant_owner: [
+    { href: '/dashboard', label: 'Dashboard' },
+    { href: '/pools', label: 'Discover Pools' },
+    { href: '/orders', label: 'My Orders' },
+    { href: '/profile/kitchen', label: 'Kitchen Profile' }
+  ],
+  supplier: [
+    { href: '/supplier/dashboard', label: 'Dashboard' },
+    { href: '/supplier/catalogue', label: 'Catalogue' },
+    { href: '/supplier/pools/new', label: 'Create Pool' },
+    { href: '/supplier/profile', label: 'Supplier Profile' }
+  ]
+};
+
+function displayName(user) {
+  return user?.username || user?.name || user?.email || 'Account';
+}
+
+function currentRoute() {
+  return (window.location.hash || '#/').replace('#', '') || '/';
+}
+
+function themeLabel() {
+  return document.documentElement.dataset.theme === 'dark' ? 'Light mode' : 'Dark mode';
+}
 
 export function renderNavbar() {
-  const user = store.user;
-  const role = store.role;
+  const { user, role } = store;
+  const route = currentRoute();
+  const isActive = (prefix) => route === prefix || route.startsWith(`${prefix}/`);
 
-  const kitchenLinks = `
-    <li><a href="#/dashboard" class="nav-link">Overview</a></li>
-    <li><a href="#/pools" class="nav-link">Explore Pools (5km)</a></li>
-    <li><a href="#/orders" class="nav-link">My Micro-Orders</a></li>
-    <li><a href="#/profile/kitchen" class="nav-link">Kitchen Location</a></li>
-  `;
+  const links = !user
+    ? ''
+    : (NAV_LINKS[role] || [])
+        .map(({ href, label }) => `
+          <a href="#${href}" class="nav-link${isActive(href) ? ' active' : ''}">${label}</a>
+        `)
+        .join('');
 
-  const supplierLinks = `
-    <li><a href="#/supplier/dashboard" class="nav-link">Supplier Hub</a></li>
-    <li><a href="#/supplier/catalogue" class="nav-link">Wholesale Catalogue</a></li>
-    <li><a href="#/supplier/pools/new" class="nav-link">Create Pool</a></li>
-    <li><a href="#/supplier/profile" class="nav-link">Warehouse Profile</a></li>
-  `;
+  const otherRoles = (user?.roles || []).filter((candidate) => candidate !== role);
+  const switchRole = otherRoles.length > 0
+    ? `<button type="button" id="btn-switch-role" class="btn btn-outline btn-sm"
+               data-role="${otherRoles[0]}">Switch to ${ROLE_LABELS[otherRoles[0]] || otherRoles[0]}</button>`
+    : '';
+
+  const identity = user
+    ? `<span class="text-muted">${displayName(user)}</span>
+       <span class="badge ${ROLE_BADGES[role] || 'badge'}">${ROLE_LABELS[role] || role || ''}</span>
+       ${switchRole}
+       <button type="button" id="btn-logout" class="btn btn-outline btn-sm">Sign Out</button>`
+    : `<a href="#/auth" class="btn btn-primary btn-sm">Sign In / Register</a>`;
 
   return `
     <header class="navbar">
       <div class="container navbar-inner">
-        <a href="#/dashboard" class="brand">
+        <a href="#/" class="brand">
+          <span class="brand-badge">C</span>
           CoBuy
-          <span class="brand-badge">B2B POOLING</span>
         </a>
 
-        <ul class="nav-links">
-          ${user ? (role === 'supplier' ? supplierLinks : kitchenLinks) : ''}
-        </ul>
+        <nav class="nav-links">
+          ${links}
+        </nav>
 
         <div class="nav-actions">
-          <!-- Theme Toggle (plain text, no emoji) -->
-          <button id="btn-theme-toggle" class="btn btn-outline btn-sm" aria-label="Toggle theme" title="Toggle theme">
-            <span id="theme-toggle-text">Theme</span>
+          <button type="button" id="btn-theme" class="btn btn-outline btn-sm" title="Toggle colour theme">
+            ${themeLabel()}
           </button>
-
-          ${user ? `
-            <span class="badge badge-role-${role === 'supplier' ? 'supplier' : 'kitchen'}">
-              ${role === 'supplier' ? 'Supplier' : 'Cloud Kitchen'}
-            </span>
-
-            <!-- Quick Role Switcher for local dev & viva demo -->
-            <button id="btn-toggle-role" class="btn btn-outline btn-sm" title="Toggle role for testing">
-              Switch Role
-            </button>
-
-            <button id="btn-logout" class="btn btn-outline btn-sm">
-              Sign Out (${user.username || 'User'})
-            </button>
-          ` : `
-            <a href="#/auth" class="btn btn-primary btn-sm">Sign In / Register</a>
-          `}
+          ${identity}
         </div>
       </div>
     </header>
@@ -66,44 +95,35 @@ export function renderNavbar() {
 }
 
 export function bindNavbarEvents(router) {
-  // Theme toggle
-  const html = document.documentElement;
-  const themeBtn = document.getElementById('btn-theme-toggle');
-  const themeText = document.getElementById('theme-toggle-text');
-
-  function updateThemeUI(theme) {
-    if (themeText) {
-      themeText.textContent = theme === 'dark' ? 'Light Mode' : 'Dark Mode';
-    }
-  }
-
-  const currentTheme = html.dataset.theme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-  updateThemeUI(currentTheme);
-
-  themeBtn?.addEventListener('click', () => {
-    const next = html.dataset.theme === 'dark' ? 'light' : 'dark';
-    html.dataset.theme = next;
+  document.getElementById('btn-theme')?.addEventListener('click', (event) => {
+    const root = document.documentElement;
+    const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = next;
+    event.currentTarget.textContent = themeLabel();
     try {
       localStorage.setItem('cobuy-theme', next);
-    } catch (e) {}
-    updateThemeUI(next);
+    } catch (e) {
+      /* private mode — theme simply won't persist */
+    }
   });
 
-  const btnLogout = document.getElementById('btn-logout');
-  if (btnLogout) {
-    btnLogout.addEventListener('click', () => {
-      store.setUser(null, null);
-      api.setToken(null);
-      router.navigate('/auth');
-    });
-  }
+  document.getElementById('btn-switch-role')?.addEventListener('click', (event) => {
+    const nextRole = event.currentTarget.getAttribute('data-role');
+    store.switchRole(nextRole);
+    router.navigate(nextRole === 'supplier' ? '/supplier/dashboard' : '/dashboard');
+  });
 
-  const btnToggleRole = document.getElementById('btn-toggle-role');
-  if (btnToggleRole) {
-    btnToggleRole.addEventListener('click', () => {
-      const nextRole = store.role === 'restaurant_owner' ? 'supplier' : 'restaurant_owner';
-      store.switchRole(nextRole);
-      router.navigate(nextRole === 'supplier' ? '/supplier/dashboard' : '/dashboard');
-    });
-  }
+  document.getElementById('btn-logout')?.addEventListener('click', async () => {
+    try {
+      await api.logout();
+    } catch (error) {
+      // The server session may already be gone (expired token); still clear locally.
+      console.warn('[Navbar] Logout request failed:', error.message);
+    }
+    store.setUser(null);
+    showToast('Signed out.');
+    // If we are already on /auth the hash does not change, so re-render directly.
+    if (window.location.hash === '#/auth') router.handleRoute();
+    else router.navigate('/auth');
+  });
 }

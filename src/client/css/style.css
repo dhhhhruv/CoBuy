@@ -254,6 +254,7 @@ body {
 
 .card-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
   gap: var(--gap-12);
@@ -351,6 +352,9 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--gap-8);
+  flex-wrap: wrap;
+  cursor: pointer;
 }
 
 .health-dot {

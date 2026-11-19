@@ -1,45 +1,92 @@
 // ============================================================================
 // File: src/client/js/components/HealthBanner.js
 // Owner: Debangshu (Frontend Lead)
-// Purpose: Live health check polling against Dhruv's GET /health endpoint
+// Purpose: Always-visible thin bar above the navbar that reports Express and
+//          MySQL availability from GET /health every 15 seconds.
 // ============================================================================
 
 import { api } from '../api/client.js';
 
-export function renderHealthBanner() {
-  return `
-    <div id="health-banner" class="health-banner">
-      <div>
-        <span id="health-dot" class="health-dot down"></span>
-        <span id="health-text">Checking CoBuy System Status...</span>
-      </div>
-      <div>
-        <span style="opacity: 0.7;">Target API: <code>http://localhost:5000</code></span>
-      </div>
-    </div>
+const POLL_INTERVAL_MS = 15000;
+
+let bannerEl = null;
+let pollTimer = null;
+let lastHealth = null;
+
+function ensureBanner() {
+  if (bannerEl && document.body.contains(bannerEl)) return bannerEl;
+
+  bannerEl = document.createElement('div');
+  bannerEl.id = 'health-banner';
+  bannerEl.className = 'health-banner';
+  bannerEl.innerHTML = `
+    <span><span class="health-dot down"></span><span class="health-text">Checking API status…</span></span>
+    <span class="health-meta"></span>
   `;
+  bannerEl.addEventListener('click', () => refreshHealth());
+
+  const app = document.getElementById('app');
+  if (app) app.prepend(bannerEl);
+  else document.body.prepend(bannerEl);
+  return bannerEl;
 }
 
-export async function initHealthCheck() {
-  const dot = document.getElementById('health-dot');
-  const text = document.getElementById('health-text');
-  if (!dot || !text) return;
+function render({ up, text, meta }) {
+  const el = ensureBanner();
+  el.querySelector('.health-dot').className = `health-dot ${up ? 'up' : 'down'}`;
+  el.querySelector('.health-text').textContent = text;
+  el.querySelector('.health-meta').textContent = meta || '';
+}
 
-  async function update() {
-    const { ok, data } = await api.checkHealth();
-    if (ok && data.status === 'healthy') {
-      dot.className = 'health-dot up';
-      text.innerHTML = `<strong>System Operational:</strong> Node API (UP) | MySQL (CONNECTED) | Uptime: ${data.uptimeSeconds}s`;
-    } else if (data.status === 'degraded') {
-      dot.className = 'health-dot down';
-      text.innerHTML = `<strong>System Degraded:</strong> Node API (UP) | MySQL (DISCONNECTED - check DB credentials)`;
-    } else {
-      dot.className = 'health-dot down';
-      text.innerHTML = `<strong>Backend Offline:</strong> Using local mock aggregation fixtures (Start backend via <code>npm start</code> on port 5000)`;
+function formatUptime(seconds) {
+  if (seconds === null || seconds === undefined) return '';
+  const total = Math.floor(Number(seconds));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (hours > 0) return `up ${hours}h ${minutes}m`;
+  if (minutes > 0) return `up ${minutes}m`;
+  return `up ${total}s`;
+}
+
+export async function refreshHealth() {
+  ensureBanner();
+
+  try {
+    const health = await api.getHealth();
+    lastHealth = health;
+
+    if (health.status === 'healthy') {
+      render({
+        up: true,
+        text: `API up · database ${health.database.toLowerCase()}`,
+        meta: formatUptime(health.uptimeSeconds),
+      });
+      return health;
     }
-  }
 
-  update();
-  setInterval(update, 15000);
+    render({
+      up: false,
+      text: `API degraded · database ${health.database || 'unavailable'}`,
+      meta: 'click to retry'
+    });
+    return health;
+  } catch (error) {
+    lastHealth = { status: 'down', error: error.message };
+    render({
+      up: false,
+      text: `Backend offline · ${error.message}`,
+      meta: 'click to retry'
+    });
+    return lastHealth;
+  }
 }
 
+export function getLastHealth() {
+  return lastHealth;
+}
+
+export function initHealthCheck() {
+  refreshHealth();
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(refreshHealth, POLL_INTERVAL_MS);
+}

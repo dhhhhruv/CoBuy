@@ -1,13 +1,14 @@
 // ============================================================================
 // File: src/client/js/app.js
 // Owner: Debangshu (Frontend Lead)
-// Purpose: Main frontend application bootstrap, route registration & state binding
+// Purpose: SPA bootstrap — app shell, session hydration, route table, guards.
 // ============================================================================
 
 import { Router } from './router.js';
 import { store } from './state.js';
+import { api } from './api/client.js';
 import { renderNavbar, bindNavbarEvents } from './components/Navbar.js';
-import { renderHealthBanner, initHealthCheck } from './components/HealthBanner.js';
+import { initHealthCheck } from './components/HealthBanner.js';
 
 // Pages
 import { renderAuthPage, bindAuthEvents } from './pages/AuthPage.js';
@@ -23,6 +24,10 @@ import { renderCreatePoolPage, bindCreatePoolEvents } from './pages/CreatePoolPa
 
 const router = new Router();
 
+function homeFor(role) {
+  return role === 'supplier' ? '/supplier/dashboard' : '/dashboard';
+}
+
 function updateNav() {
   const navContainer = document.getElementById('navbar-container');
   if (navContainer) {
@@ -32,7 +37,7 @@ function updateNav() {
 }
 
 // ----------------------------------------------------------------------------
-// Route Registrations
+// Route table. `auth` requires a hydrated session, `role` enforces the actor.
 // ----------------------------------------------------------------------------
 router.register('/auth', {
   render: renderAuthPage,
@@ -56,7 +61,7 @@ router.register('/pools', {
   auth: true,
   role: 'restaurant_owner',
   render: renderPoolDiscoveryPage,
-  afterRender: bindPoolDiscoveryEvents
+  afterRender: () => bindPoolDiscoveryEvents()
 });
 
 router.register('/pools/:id', {
@@ -70,7 +75,7 @@ router.register('/orders', {
   auth: true,
   role: 'restaurant_owner',
   render: renderOrdersPage,
-  afterRender: bindOrdersEvents
+  afterRender: () => bindOrdersEvents(router)
 });
 
 router.register('/supplier/dashboard', {
@@ -97,40 +102,96 @@ router.register('/supplier/pools/new', {
   auth: true,
   role: 'supplier',
   render: renderCreatePoolPage,
-  afterRender: () => bindCreatePoolEvents(router)
+  afterRender: (params, query) => bindCreatePoolEvents(router, query)
 });
 
-// App Startup
-document.addEventListener('DOMContentLoaded', () => {
+// Suppliers inspect their own pools through the same detail view kitchens use.
+router.register('/supplier/pools/:id', {
+  auth: true,
+  role: 'supplier',
+  render: renderPoolDetailPage,
+  afterRender: (params) => bindPoolDetailEvents(params, router)
+});
+
+// ----------------------------------------------------------------------------
+// Session bootstrap: a stored token is verified against /api/users/me so role
+// changes and revoked sessions can never leave a stale UI signed in.
+// ----------------------------------------------------------------------------
+async function hydrateSession() {
+  if (!api.getToken()) {
+    store.setUser(null);
+    return null;
+  }
+
+  try {
+    const me = await api.getMe();
+    store.setUser(me);
+
+    // A returning kitchen must discover pools around its own profile, not
+    // around the placeholder location held in the store.
+    if (store.role === 'restaurant_owner') {
+      try {
+        const restaurants = await api.getMyRestaurants();
+        const profile = restaurants[0];
+        if (profile?.location) {
+          store.setLocation(
+            profile.location.latitude,
+            profile.location.longitude,
+            profile.addressText || store.location.address
+          );
+        }
+      } catch (profileError) {
+        // Profile setup is optional; discovery still works with the default zone.
+        console.warn('[Session] Could not load kitchen location:', profileError.message);
+      }
+    }
+
+    return me;
+  } catch (error) {
+    // A network outage should not log the user out; only an auth failure does.
+    if (error.status === 401) {
+      api.clearTokens();
+      store.setUser(null);
+    }
+    return store.user;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
   const appContainer = document.getElementById('app');
   if (!appContainer) return;
 
   appContainer.innerHTML = `
-    ${renderHealthBanner()}
     <div id="navbar-container"></div>
     <main id="view-container" class="main-content"></main>
     <div id="toast-container" class="toast-container"></div>
   `;
 
   router.setContainer(document.getElementById('view-container'));
-
-  updateNav();
+  store.subscribe(() => updateNav());
   initHealthCheck();
 
-  store.subscribe(() => {
-    updateNav();
-    router.handleRoute();
+  // A failed refresh means the session is over; drop local state and force auth.
+  window.addEventListener('cobuy:session-expired', () => {
+    if (!store.user) return;
+    api.clearTokens();
+    store.setUser(null);
+    router.navigate('/auth');
   });
 
-  // Default redirect if unauthenticated or fresh visit
-  if (!window.location.hash) {
-    if (!store.user) {
-      router.navigate('/auth');
-    } else {
-      router.navigate(store.role === 'supplier' ? '/supplier/dashboard' : '/dashboard');
-    }
-  } else {
-    router.handleRoute();
-  }
-});
+  const user = await hydrateSession();
+  updateNav();
 
+  const hash = window.location.hash;
+  if (!hash || hash === '#/' || hash === '#') {
+    router.navigate(user ? homeFor(store.role) : '/auth');
+    return;
+  }
+
+  if (user && hash.startsWith('#/auth')) {
+    router.navigate(homeFor(store.role));
+    return;
+  }
+
+  router.handleRoute();
+});
