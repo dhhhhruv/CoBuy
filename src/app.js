@@ -13,7 +13,9 @@ const prisma = require('./db/prisma');
 const authRoutes = require('./auth/authRoutes');
 const restaurantRoutes = require('./profiles/restaurantRoutes');
 const supplierRoutes = require('./profiles/supplierRoutes');
-const discoveryRoutes = require('./pools/discoveryRoutes');
+const productRoutes = require('./catalogue/productRoutes');
+const catalogueRoutes = require('./catalogue/catalogueRoutes');
+const poolRoutes = require('./pools/poolRoutes');
 const orderRoutes = require('./orders/orderRoutes');
 const { notFoundHandler, errorHandler } = require('./middleware/errorHandler');
 
@@ -41,7 +43,9 @@ app.use(express.static(path.join(__dirname, 'client')));
 app.use('/api/users', authRoutes);
 app.use('/api/restaurants', restaurantRoutes);
 app.use('/api/suppliers', supplierRoutes);
-app.use('/api/pools', discoveryRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/catalogue', catalogueRoutes);
+app.use('/api/pools', poolRoutes);
 app.use('/api/orders', orderRoutes);
 
 // ----------------------------------------------------------------------------

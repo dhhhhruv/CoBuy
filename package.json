@@ -8,9 +8,15 @@
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
     "db:migrate": "node src/db/migrate.js",
+    "db:seed": "node src/db/seed.js",
     "test": "node tests/e2e_test.js",
     "test:negative": "node tests/negative_tests.js",
-    "test:oauth": "node tests/oauth_refresh_test.js"
+    "test:oauth": "node tests/oauth_refresh_test.js",
+    "test:catalogue": "node tests/catalogue_pool_test.js",
+    "test:aggregation": "node tests/aggregation_edge_test.js",
+    "test:concurrency": "node tests/concurrency_test.js",
+    "test:demo": "node tests/demo_run_test.js",
+    "test:all": "node tests/e2e_test.js && node tests/negative_tests.js && node tests/catalogue_pool_test.js && node tests/aggregation_edge_test.js && node tests/concurrency_test.js && node tests/demo_run_test.js"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

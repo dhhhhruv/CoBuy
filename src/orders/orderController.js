@@ -8,6 +8,7 @@
 const crypto = require('crypto');
 const prisma = require('../db/prisma');
 const { AppError } = require('../middleware/errorHandler');
+const lifecycle = require('../pools/poolLifecycle');
 
 /**
  * POST /api/orders
@@ -21,6 +22,9 @@ const { AppError } = require('../middleware/errorHandler');
 async function placeOrder(req, res, next) {
   try {
     const { poolId, restaurantId, requestedQty } = req.body;
+
+    // Expiry policy (Decision 7): lazily close stale pools before ordering.
+    await lifecycle.expireStalePools(prisma);
 
     // 1. Validation
     if (!poolId || !requestedQty) {
@@ -78,6 +82,7 @@ async function placeOrder(req, res, next) {
         p.current_qty,
         p.target_moq,
         p.expiration_time,
+        UNIX_TIMESTAMP(p.expiration_time) AS expiration_epoch,
         c.price_per_unit,
         c.min_order_qty,
         ST_Distance_Sphere(r.location_coord, p.geographic_zone) AS distance_meters
@@ -94,10 +99,15 @@ async function placeOrder(req, res, next) {
     const pool = poolCheck[0];
 
     if (pool.status !== 'ACTIVE') {
-      throw new AppError(`Cannot place order: Pool is ${pool.status}`, 400, 'INVALID_POOL_STATUS');
+      // 409: the request is valid, but conflicts with the pool's current state.
+      throw new AppError(`Cannot place order: Pool is ${pool.status}`, 409, 'INVALID_POOL_STATUS');
     }
 
-    if (new Date(pool.expiration_time) < new Date()) {
+    // Compare epoch seconds computed by MySQL with the Node clock. Comparing
+    // JS-parsed timestamps would be wrong when the DB session timezone differs
+    // from UTC (MySQL returns local wall-clock time for TIMESTAMP columns).
+    const nowEpochSeconds = Math.floor(Date.now() / 1000);
+    if (Number(pool.expiration_epoch) <= nowEpochSeconds) {
       throw new AppError('Cannot place order: Buying pool has expired', 400, 'POOL_EXPIRED');
     }
 
@@ -115,6 +125,41 @@ async function placeOrder(req, res, next) {
     const orderId = crypto.randomUUID();
 
     const result = await prisma.$transaction(async (tx) => {
+      // Pessimistic row lock: SELECT ... FOR UPDATE serializes every order that
+      // targets this pool. Without it, two kitchens could both read 350 kg and
+      // both write 450 kg, losing one contribution (the lost-update anomaly).
+      const lockedRows = await tx.$queryRaw`
+        SELECT pool_id, status, current_qty, target_moq, expiration_time,
+               UNIX_TIMESTAMP(expiration_time) AS expiration_epoch
+        FROM buying_pools
+        WHERE pool_id = ${poolId}
+        FOR UPDATE
+      `;
+
+      if (!lockedRows || lockedRows.length === 0) {
+        throw new AppError('Buying pool not found', 404, 'POOL_NOT_FOUND');
+      }
+
+      const locked = lockedRows[0];
+
+      // Re-validate against the locked row, not the earlier unlocked read.
+      if (locked.status !== lifecycle.POOL_STATUSES.ACTIVE) {
+        throw new AppError(`Cannot place order: Pool is ${locked.status}`, 409, 'INVALID_POOL_STATUS');
+      }
+      if (Number(locked.expiration_epoch) <= Math.floor(Date.now() / 1000)) {
+        throw new AppError('Cannot place order: Buying pool has expired', 400, 'POOL_EXPIRED');
+      }
+
+      const currentQty = Number(locked.current_qty);
+      const targetMoq = Number(locked.target_moq);
+      const newQty = Number((currentQty + qty).toFixed(2));
+      const newStatus = lifecycle.statusForQuantity(newQty, targetMoq);
+
+      // ACTIVE -> FULFILLED is the only transition ordering may cause.
+      if (newStatus !== locked.status) {
+        lifecycle.assertTransition(locked.status, newStatus);
+      }
+
       // Create micro-order
       const createdOrder = await tx.micro_orders.create({
         data: {
@@ -127,11 +172,7 @@ async function placeOrder(req, res, next) {
         }
       });
 
-      // Atomically update pool current_qty
-      const newQty = Number(pool.current_qty) + qty;
-      const targetMoq = Number(pool.target_moq);
-      const newStatus = newQty >= targetMoq ? 'FULFILLED' : 'ACTIVE';
-
+      // Persist the locked read + delta, inside the same transaction.
       await tx.buying_pools.update({
         where: { pool_id: poolId },
         data: {
@@ -144,7 +185,8 @@ async function placeOrder(req, res, next) {
         createdOrder,
         poolStatus: newStatus,
         poolCurrentQty: newQty.toFixed(2),
-        poolTargetMoq: targetMoq.toFixed(2)
+        poolTargetMoq: targetMoq.toFixed(2),
+        overfillBy: lifecycle.overfillBy(qty, currentQty, targetMoq)
       };
     });
 
@@ -160,11 +202,22 @@ async function placeOrder(req, res, next) {
         poolStatus: result.poolStatus,
         poolCurrentQty: Number(result.poolCurrentQty),
         poolTargetMoq: Number(result.poolTargetMoq),
+        // Overfill policy (Decision 6): overfill is accepted and reported.
+        overfillBy: result.overfillBy,
         createdAt: result.createdOrder.created_at
       },
       timestamp: new Date().toISOString()
     });
   } catch (err) {
+    // A concurrent duplicate can slip past the pre-check; the DB unique key is
+    // the final arbiter, so translate it into the contract's 409 code.
+    if (err && err.code === 'P2002') {
+      return next(new AppError(
+        'This restaurant has already placed an order in this buying pool.',
+        409,
+        'ALREADY_ORDERED'
+      ));
+    }
     next(err);
   }
 }

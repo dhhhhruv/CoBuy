@@ -162,3 +162,36 @@
 - **What other devs must know:**
   - **Debangshu (Dev 3):** Authentication responses now include `{ token, accessToken, refreshToken, expiresIn }`. Single sign-on can be triggered via `/api/users/oauth/authorize` or `api.oauthToken(code)`.
 - **How to run and test:** Run `npm run test:oauth`.
+
+---
+
+### Thu 19 Nov 2026 | Dev: Shaaz | Task: Days 1-5 (backfilled) — Lifecycle, seed data and SQL order flow
+
+- **What was built:** `src/pools/poolLifecycle.js`, `src/db/seed.js` (`npm run db:seed`), `docs/ORDER_FLOW_SQL.md`, `docs/POOL_LIFECYCLE.md`.
+- **Schema or API changes:** None (schema unchanged). Settled Decisions 4, 6, 7 and confirmed 8 in `docs/DECISIONS.md`.
+- **Decisions made & why:** Suppliers create pools (only they know the MOQ they will serve); overfill allowed and reported via `overfillBy`; expiry by lazy sweep guarded on `status = 'ACTIVE'`. Seed uses fixed UUIDs and reusable products so it is idempotent; `current_qty` is reconciled from micro-orders instead of being invented.
+- **Open questions or blockers:** Timezone trap found — MySQL returns `TIMESTAMP` as local wall-clock; expiry now uses `UNIX_TIMESTAMP` epoch comparisons.
+- **What other devs must know:** Demo accounts are `demo.kitchen.a@cobuy.demo` … password `Password123!`. Pools expire correctly on IST machines.
+- **How to run and test:** `npm run db:seed`; review `docs/ORDER_FLOW_SQL.md`.
+
+---
+
+### Thu 19 Nov 2026 | Dev: Shaaz | Task: Days 6-8 (backfilled) — Catalogue CRUD, pool CRUD, lifecycle rules in one module
+
+- **What was built:** `src/catalogue/*` (products + supplier catalogue), `src/pools/poolController.js`, `src/pools/poolRoutes.js`, `tests/catalogue_pool_test.js`.
+- **Schema or API changes:** Added `GET/POST/PATCH/DELETE /api/products`, `GET /api/catalogue`, `GET /api/catalogue/me`, `POST/PATCH/DELETE /api/catalogue`, `POST /api/pools`, `GET /api/pools`, `GET /api/pools/:id`, and the `/api/pools/nearby` alias used by the frontend. `/api/pools/discover` unchanged.
+- **Decisions made & why:** `POST /api/pools` requires supplier ownership of the catalogue offer; `target_moq` is a snapshot; duplicate offers return `409 DUPLICATE_CATALOGUE_OFFER`; catalogue deletion is blocked while pools exist.
+- **Open questions or blockers:** None.
+- **What other devs must know:** Frontend `api.getNearbyPools()` now resolves; pool detail is available for the detail screen.
+- **How to run and test:** `npm run test:catalogue`.
+
+---
+
+### Thu 19 Nov 2026 | Dev: Shaaz | Task: Days 9-15 (backfilled) — Atomic aggregation, concurrency proof, edge tests, write-ups
+
+- **What was built:** `src/orders/orderController.js` (row lock + overfill + expiry), `tests/concurrency_test.js`, `tests/aggregation_edge_test.js`, `tests/demo_run_test.js`, `tests/testUtils.js`, `docs/NORMALIZATION.md`, `docs/VIVA_NOTES.md`.
+- **Schema or API changes:** `POST /api/orders` now locks the pool row `FOR UPDATE`, re-validates under the lock, returns `overfillBy`, and returns `409 INVALID_POOL_STATUS` for closed pools. Expiry comparisons use epoch seconds.
+- **Decisions made & why:** Pessimistic row locking over optimistic retries or SERIALIZABLE; order + quantity + status transition stay in one transaction; naive read-then-write retained only inside the test to demonstrate the lost update.
+- **Open questions or blockers:** Existing pledges cannot be increased (would need an update endpoint); documented as a limitation.
+- **What other devs must know:** `npm run test:all` covers every suite; concurrency test asserts 350 + 100 + 100 = 550 kg and shows the naive version recording only 100 kg.
+- **How to run and test:** `npm run test:concurrency`, `npm run test:aggregation`, `npm run test:demo`, `npm run test:all`.

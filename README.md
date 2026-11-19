@@ -197,6 +197,42 @@ cd CoBuy
 # JWT_SECRET=your_jwt_secret_key
 # PORT=5000
 
-# 3. Read the documentation before contributing!
-# Always review docs/DECISIONS.md and docs/API_CONTRACT.md first.
+# 3. Install dependencies
+npm install
+
+# 4. Create the schema and load demo data
+npm run db:migrate
+npm run db:seed
+
+# 5. Start the server (API + static frontend)
+npm start
+# API:      http://localhost:5000/api
+# Health:   http://localhost:5000/health
+# Frontend: http://localhost:5000/
+
+# 6. Run the test suites
+npm run test:all
 ```
+
+### Demo accounts (after `npm run db:seed`)
+
+| Role | Email | Password |
+|---|---|---|
+| Kitchen A | `demo.kitchen.a@cobuy.demo` | `Password123!` |
+| Kitchen B | `demo.kitchen.b@cobuy.demo` | `Password123!` |
+| Kitchen C | `demo.kitchen.c@cobuy.demo` | `Password123!` |
+| Supplier (Fresh Foods) | `demo.freshfoods@cobuy.demo` | `Password123!` |
+| Supplier (Green Basket) | `demo.greenbasket@cobuy.demo` | `Password123!` |
+
+The seed is idempotent: it reuses its own `demo_` accounts and products and
+recomputes each pool's `current_qty` from its micro-orders, so it can be run
+again before a demo without duplicating data or wiping orders.
+
+### Documentation map
+
+- `docs/DECISIONS.md` — schema, auth, lifecycle and overfill decisions
+- `docs/API_CONTRACT.md` — every request/response, including error codes
+- `docs/POOL_LIFECYCLE.md` — status machine, expiry and overfill policy
+- `docs/NORMALIZATION.md` — UNF to 4NF with CoBuy examples, plus transactions
+- `docs/ORDER_FLOW_SQL.md` — the order flow in plain SQL
+- `docs/VIVA_NOTES.md` — aggregation Q&A, swap areas, honest limitations

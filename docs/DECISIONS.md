@@ -165,7 +165,7 @@ CoBuy consists of 8 tables modeling the procurement lifecycle. Below is the exac
 
 ---
 
-## 9. OAuth2 / OpenID Connect (OIDC) & Dual-Token Authentication
+## 9. Dual-Token Authentication
 
 - **Architecture:** Dual-token model combining ephemeral JWT Access Tokens (15-minute expiration) with stateful, rotating Refresh Tokens (7-day expiration).
 - **Refresh Token Storage & Security:**
@@ -173,8 +173,39 @@ CoBuy consists of 8 tables modeling the procurement lifecycle. Below is the exac
   - Only the **SHA-256 hash** of the refresh token is stored in the `refresh_tokens` table. In the event of a database breach, plain refresh tokens cannot be harvested.
   - **Token Rotation:** Every `/api/users/refresh` exchange invalidates the supplied refresh token and issues a fresh pair. Replaying an old or revoked token triggers a 401 rejection.
   - **Revocation on Logout:** `/api/users/logout` flags the token as `revoked = true` in MySQL.
-- **OpenID Connect (OIDC) Integration:**
+## 10. OAuth2 / OpenID Connect (OIDC) Integration
+
+**Scope:**
   - Standard Authorization Code grant requesting `openid email profile` scopes.
   - Supports Google Identity Services and generic OIDC providers.
   - **Just-In-Time (JIT) Provisioning:** Users signing in via OIDC are automatically provisioned in `users` and assigned their requested role in `user_roles` within an atomic transaction.
   - **Offline / Viva Resilience:** Includes a deterministic mock OIDC mode (`/api/users/oauth/mock` and simulated callback) ensuring offline tests and viva presentations run reliably without depending on live external internet connectivity or Google Cloud secrets.
+
+---
+
+## 11. Pool Ownership, Overfill and Expiry (Settled Day 1, Implemented Day 12)
+
+These close the open questions in section 2 of the 20-day plan.
+
+### 11.1 Decision 4: who creates a buying pool
+- **Decision:** A supplier opens a pool from one of its own `supplier_catalogue` offers (`POST /api/pools`). Kitchens only discover and join.
+- **Rationale:** Only the supplier knows the MOQ it will serve and the cluster it can deliver to. Allowing kitchens to open pools would let a kitchen invent a target the supplier never agreed to.
+- **Authorization:** `supplier` role + `supplier_catalogue.supplier_id` must belong to the authenticated user's supplier profile.
+
+### 11.2 Decision 6: an order larger than the remaining quantity
+- **Decision:** Overfill is **allowed**. The pool aggregates the full pledged quantity, transitions to `FULFILLED`, and the order response reports `overfillBy` (surplus over `target_moq`).
+- **Rationale:** The MOQ is a supplier minimum, not a maximum. Rejecting a pledge because another kitchen arrived first makes the outcome timing-dependent, and the plan's own concurrency example (350 kg + 100 kg + 100 kg) requires overfill to be legal.
+- **Alternative rejected:** rejecting the whole order, or partially accepting only the remainder, both add a second fulfilment concept for no business benefit.
+- **Frontend contract:** `progressPercentage` is capped at 100; `overfillBy > 0` can be shown as a warning.
+
+### 11.3 Decision 7: pool statuses and expiry
+- **Statuses:** `ACTIVE`, `FULFILLED`, `EXPIRED`, `CANCELLED` (enforced by `chk_pools_status`).
+- **Transitions:** only `ACTIVE -> FULFILLED | EXPIRED | CANCELLED`. The other three are terminal. Illegal transitions return `409 INVALID_STATUS_TRANSITION`.
+- **Expiry:** lazy sweep, not a scheduled job. `expireStalePools()` runs before discovery, listing, pool detail and order placement, guarded by `status = 'ACTIVE'` so a fulfilled pool is never reclassified.
+- **Clock rule:** all expiry comparisons use epoch seconds (`UNIX_TIMESTAMP`) against `Date.now()`, because MySQL returns `TIMESTAMP` values as local wall-clock time and Node reads the machine clock as UTC (a 5.5-hour skew on IST).
+
+### 11.4 Decision 8: payment status (confirmation)
+- `payment_status` is `PENDING` or `PAID`, changed through `PATCH /api/orders/:id/payment` by the restaurant owner or the pool's supplier.
+- There is no gateway, refund or wallet movement; `wallet_balance` remains a stored figure only.
+
+---
