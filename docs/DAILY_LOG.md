@@ -142,3 +142,23 @@
   - **Shaaz (Dev 2):** Order creation and lifecycle transitions are fully wired on `POST /api/orders` and covered by end-to-end and negative tests.
   - **Debangshu (Dev 3):** Endpoints `GET /api/orders/my` and `PATCH /api/orders/:id/payment` are live on the backend.
 - **How to run and test:** Run `npm test` and `npm run test:negative`.
+
+
+---
+
+### Thu 19 Nov 2026 | Dev: Dhruv | Task: Authentication Evolution — OAuth2 + OIDC & Dual-Token (JWT + Refresh Token Rotation)
+
+- **What was built:** `src/auth/oidcService.js`, updated `src/auth/authUtils.js`, `src/auth/authController.js`, `src/auth/authRoutes.js`, `src/db/schema.sql`, `prisma/schema.prisma`, `tests/oauth_refresh_test.js`.
+- **Schema or API changes:**
+  - Added table `refresh_tokens(token_id, user_id, token_hash, expires_at, revoked, created_at)` with FK cascade on `users`.
+  - Updated `POST /api/users/login` to return dual tokens: ephemeral JWT `accessToken` (15m) + cryptographic `refreshToken` (7d).
+  - Added `POST /api/users/refresh`: Exchanges a valid refresh token for a fresh token pair while executing cryptographic token rotation.
+  - Added `POST /api/users/logout`: Revokes refresh token in MySQL.
+  - Added `GET /api/users/oauth/authorize`: Generates standard OpenID Connect (OIDC) authorization URL with CSRF state and role encoding.
+  - Added `GET /api/users/oauth/callback`: OIDC authorization code exchange with Just-In-Time (JIT) user and role provisioning.
+  - Added `POST /api/users/oauth/token`: Direct code exchange endpoint for SPAs.
+  - Added `POST /api/users/oauth/mock`: Deterministic OIDC mock sign-in endpoint for offline testing & viva demonstrations.
+- **Decisions made & why:** Implemented token rotation to defend against token replay attacks. Stored only the SHA-256 hash of refresh tokens in MySQL to ensure security even in the event of a database dump. Built a deterministic offline mock OIDC fallback so viva presentations never fail due to missing external internet access or third-party client secret configuration.
+- **What other devs must know:**
+  - **Debangshu (Dev 3):** Authentication responses now include `{ token, accessToken, refreshToken, expiresIn }`. Single sign-on can be triggered via `/api/users/oauth/authorize` or `api.oauthToken(code)`.
+- **How to run and test:** Run `npm run test:oauth`.

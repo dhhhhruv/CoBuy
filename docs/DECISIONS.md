@@ -159,3 +159,22 @@ CoBuy consists of 8 tables modeling the procurement lifecycle. Below is the exac
 | `micro_orders` | `uq_orders_pool_restaurant` | Composite UNIQUE | `(pool_id, restaurant_id)` | One micro-order per restaurant per buying pool |
 | `micro_orders` | `chk_orders_qty` | CHECK | `requested_qty > 0` | Prevents zero or negative micro-order pledges |
 | `micro_orders` | `chk_orders_payment`| CHECK | `payment_status IN ('PENDING','PAID')` | Enforces financial settlement state domain |
+| `refresh_tokens` | `PRIMARY` | PK | `token_id` | UUIDv4 identifier |
+| `refresh_tokens` | `uq_refresh_tokens_hash` | UNIQUE | `token_hash` | SHA-256 hashed refresh token lookup |
+| `refresh_tokens` | `fk_refresh_tokens_user` | FK | `user_id` $\rightarrow$ `users.user_id` | `ON DELETE CASCADE` revokes active tokens if account is deleted |
+
+---
+
+## 9. OAuth2 / OpenID Connect (OIDC) & Dual-Token Authentication
+
+- **Architecture:** Dual-token model combining ephemeral JWT Access Tokens (15-minute expiration) with stateful, rotating Refresh Tokens (7-day expiration).
+- **Refresh Token Storage & Security:**
+  - Refresh tokens are generated as 64-character cryptographically secure random values.
+  - Only the **SHA-256 hash** of the refresh token is stored in the `refresh_tokens` table. In the event of a database breach, plain refresh tokens cannot be harvested.
+  - **Token Rotation:** Every `/api/users/refresh` exchange invalidates the supplied refresh token and issues a fresh pair. Replaying an old or revoked token triggers a 401 rejection.
+  - **Revocation on Logout:** `/api/users/logout` flags the token as `revoked = true` in MySQL.
+- **OpenID Connect (OIDC) Integration:**
+  - Standard Authorization Code grant requesting `openid email profile` scopes.
+  - Supports Google Identity Services and generic OIDC providers.
+  - **Just-In-Time (JIT) Provisioning:** Users signing in via OIDC are automatically provisioned in `users` and assigned their requested role in `user_roles` within an atomic transaction.
+  - **Offline / Viva Resilience:** Includes a deterministic mock OIDC mode (`/api/users/oauth/mock` and simulated callback) ensuring offline tests and viva presentations run reliably without depending on live external internet connectivity or Google Cloud secrets.

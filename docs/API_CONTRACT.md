@@ -154,6 +154,10 @@ Every JSON response adheres to a predictable envelope:
   "success": true,
   "data": {
     "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "7c8b2a3d...",
+    "tokenType": "Bearer",
+    "expiresIn": 900,
     "user": {
       "userId": "b4a5f6e8-2d3c-4b5a-9e8f-1a2b3c4d5e6f",
       "username": "kitchen_a",
@@ -176,6 +180,126 @@ Every JSON response adheres to a predictable envelope:
 ```
 
 ---
+
+### `POST /api/users/refresh`
+- **Owner:** Dhruv (Database & Auth)
+- **Auth:** None (Public)
+- **Description:** Rotates the refresh token (revokes current, issues new) and provides a new 15-minute JWT Access Token.
+
+#### Request Body:
+```json
+{
+  "refreshToken": "7c8b2a3d..."
+}
+```
+
+#### Response: `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "8d9e0f1a...",
+    "tokenType": "Bearer",
+    "expiresIn": 900
+  }
+}
+```
+
+#### Error: `401 Unauthorized`
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_REFRESH_TOKEN",
+    "message": "Refresh token is invalid, expired, or has been revoked"
+  }
+}
+```
+
+---
+
+### `POST /api/users/logout`
+- **Owner:** Dhruv (Database & Auth)
+- **Auth:** None / Public
+- **Description:** Revokes the specified refresh token in the database.
+
+#### Request Body:
+```json
+{
+  "refreshToken": "7c8b2a3d..."
+}
+```
+
+#### Response: `200 OK`
+```json
+{
+  "success": true,
+  "message": "Logged out successfully. Refresh token revoked."
+}
+```
+
+---
+
+### `GET /api/users/oauth/authorize`
+- **Owner:** Dhruv (Database & Auth)
+- **Auth:** None (Public)
+- **Description:** Initiates OAuth2 / OpenID Connect (OIDC) authorization flow. Returns authorization URL or redirects.
+- **Query Parameters:** `provider` (`google`), `role` (`restaurant_owner` / `supplier`), `redirect` (`true` / `false`).
+
+#### Response: `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "authorizationUrl": "https://accounts.google.com/o/oauth2/v2/auth?client_id=...",
+    "state": "eyJjc3JmIjo...",
+    "provider": "google"
+  }
+}
+```
+
+---
+
+### `GET /api/users/oauth/callback`
+- **Owner:** Dhruv (Database & Auth)
+- **Auth:** None (Public)
+- **Description:** OAuth2 callback receiving `code` and `state`, performing token exchange and JIT user provisioning.
+
+---
+
+### `POST /api/users/oauth/token`
+- **Owner:** Dhruv (Database & Auth)
+- **Auth:** None (Public)
+- **Description:** Direct authorization code exchange endpoint for SPAs.
+
+#### Request Body:
+```json
+{
+  "code": "4/0A...",
+  "role": "restaurant_owner"
+}
+```
+
+#### Response: `200 OK`
+Returns `{ token, accessToken, refreshToken, tokenType, expiresIn, user }`.
+
+---
+
+### `POST /api/users/oauth/mock`
+- **Owner:** Dhruv (Database & Auth)
+- **Auth:** None (Public)
+- **Description:** Deterministic OIDC mock sign-in endpoint for offline testing & viva demonstrations.
+
+#### Request Body:
+```json
+{
+  "email": "chef@gmail.com",
+  "name": "Chef Demo",
+  "role": "restaurant_owner"
+}
+```
 
 ## 4. Product & Catalogue Management (Shaaz's Area)
 
