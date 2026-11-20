@@ -49,7 +49,7 @@ export async function renderCataloguePage() {
                   </select>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="form-row">
                   <div class="form-group">
                     <label class="form-label" for="offer-price">Price per Unit (₹)</label>
                     <input type="number" min="0.01" step="0.01" id="offer-price" class="form-control" placeholder="20.00" required>
@@ -75,7 +75,7 @@ export async function renderCataloguePage() {
                 <label class="form-label" for="product-name">Product Name</label>
                 <input type="text" id="product-name" class="form-control" placeholder="Basmati Rice" required>
               </div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+              <div class="form-row">
                 <div class="form-group">
                   <label class="form-label" for="product-unit">Unit</label>
                   <input type="text" id="product-unit" class="form-control" placeholder="kg" maxlength="20" required>

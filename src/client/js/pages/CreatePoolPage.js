@@ -59,7 +59,7 @@ export async function renderCreatePoolPage(params, query) {
             <span class="form-help">Only your company's offers are listed.</span>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div class="form-row">
             <div class="form-group">
               <label class="form-label" for="pool-lat">Zone Centre Latitude</label>
               <input type="number" step="0.000001" min="-90" max="90" id="pool-lat" class="form-control"

@@ -58,7 +58,7 @@ export async function renderKitchenProfilePage() {
             <span class="form-help">Stored for reporting only; no payment gateway is connected.</span>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div class="form-row">
             <div class="form-group">
               <label class="form-label" for="kitchen-lat">Latitude (WGS 84)</label>
               <input type="number" step="0.000001" id="kitchen-lat" class="form-control" value="${lat}" required>
@@ -78,7 +78,7 @@ export async function renderKitchenProfilePage() {
             <code style="display: block; margin-top: 0.25rem;">ST_Distance_Sphere(restaurant.location_coord, pool.geographic_zone) &lt;= 5000</code>
           </div>
 
-          <div style="display: flex; justify-content: space-between; gap: 1rem;">
+          <div class="form-actions">
             ${existing ? '<button type="button" id="btn-delete-kitchen" class="btn btn-outline">Delete Profile</button>' : '<span></span>'}
             <button type="submit" class="btn btn-primary" id="btn-save-kitchen">
               ${existing ? 'Save Kitchen Changes' : 'Create Kitchen Profile'}

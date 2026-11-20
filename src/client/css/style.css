@@ -13,11 +13,19 @@
   padding: 0;
 }
 
-html { scroll-behavior: smooth; }
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
 
 /* --------------------------------------------------------------------------
    2. BASE — typography & page scaffold
    -------------------------------------------------------------------------- */
+/* Long identifiers (SQL snippets, UUIDs, emails) must never widen the page. */
+code {
+  overflow-wrap: anywhere;
+}
+
 body {
   font-family: var(--font-sans);
   font-size: var(--text-14);
@@ -424,6 +432,24 @@ textarea.form-control {
   color: var(--text-2);
 }
 
+/* Row of form actions — stacks on phones, side by side from tablet up. */
+.form-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--gap-16);
+}
+
+/* Two fields side by side on wide screens, stacked on phones. */
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gap-16);
+}
+
+.form-row > * {
+  min-width: 0;
+}
+
 /* Alert box inside forms */
 .form-alert {
   font-size: var(--text-13);
@@ -447,24 +473,26 @@ textarea.form-control {
 /* --------------------------------------------------------------------------
    12. GRIDS
    -------------------------------------------------------------------------- */
-.grid-2 {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: var(--gap-22);
-}
-
-.grid-3 {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: var(--gap-22);
-}
-
+/* Fixed track counts per breakpoint — auto-fit used to give 4 stat boxes five
+   tracks and 2 pool cards three, leaving a ragged empty column on laptops. */
+.grid-2,
+.grid-3,
 .grid-4 {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--gap-22);
+}
+
+.grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.grid-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--gap-16);
 }
 
+/* --------------------------------------------------------------------------
+   12b. PHONES — one column, two-row app shell
+   -------------------------------------------------------------------------- */
 @media (max-width: 640px) {
   .grid-2, .grid-3, .grid-4 {
     grid-template-columns: 1fr;
@@ -477,14 +505,88 @@ textarea.form-control {
   .page-wrapper {
     padding: var(--gap-20) var(--gap-16);
   }
+
+  /* Row 1: wordmark + account controls. Row 2: horizontally scrollable nav. */
   .navbar-inner {
     flex-wrap: wrap;
     height: auto;
     padding: var(--gap-8) 0;
+    gap: var(--gap-8);
   }
-  .nav-links {
+  .brand {
+    font-size: var(--text-22);
+  }
+  .navbar .nav-actions {
+    margin-left: auto;
+    gap: 6px;
+  }
+  /* The signed-in name is repeated on the profile screen; drop it here. */
+  .navbar .nav-actions .text-muted {
+    display: none;
+  }
+  .navbar .nav-links {
     order: 3;
     width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 2px;
+  }
+  .navbar .nav-links::-webkit-scrollbar {
+    display: none;
+  }
+  .navbar .nav-link {
+    flex: 0 0 auto;
+    padding: 8px 10px;
+  }
+
+  /* Theme toggle becomes a compact icon so the top row always fits. */
+  #btn-theme {
+    width: 36px;
+    padding: 0;
+  }
+  #btn-theme .theme-label {
+    display: none;
+  }
+  #btn-theme::before {
+    content: '\25D0';
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  .form-actions {
+    flex-direction: column-reverse;
+  }
+  .form-actions .btn {
+    width: 100%;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: var(--gap-12);
+  }
+
+  .toast-container {
+    left: var(--gap-16);
+    right: var(--gap-16);
+    bottom: var(--gap-16);
+  }
+  .toast {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .modal-content {
+    padding: var(--gap-20);
+  }
+}
+
+/* Very narrow phones: the role chip yields so nothing overflows. */
+@media (max-width: 380px) {
+  .navbar .badge-role-kitchen,
+  .navbar .badge-role-supplier {
+    display: none;
   }
 }
 

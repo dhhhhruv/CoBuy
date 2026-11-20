@@ -39,7 +39,7 @@ export async function renderSupplierProfilePage() {
                    value="${existing?.contactEmail || store.user?.email || ''}">
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div class="form-row">
             <div class="form-group">
               <label class="form-label" for="wh-lat">Warehouse Latitude (WGS 84)</label>
               <input type="number" step="0.000001" id="wh-lat" class="form-control" required
@@ -55,7 +55,7 @@ export async function renderSupplierProfilePage() {
             </div>
           </div>
 
-          <div style="display: flex; justify-content: space-between; gap: 1rem;">
+          <div class="form-actions">
             ${existing ? '<button type="button" id="btn-delete-supplier" class="btn btn-outline">Delete Company</button>' : '<span></span>'}
             <button type="submit" class="btn btn-primary" id="btn-save-supplier">
               ${existing ? 'Save Company Changes' : 'Create Company Profile'}
