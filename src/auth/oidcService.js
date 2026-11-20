@@ -30,7 +30,13 @@ function getAuthorizationUrl({
   role = 'restaurant_owner',
   redirectUri = process.env.OAUTH_GOOGLE_REDIRECT_URI || 'http://localhost:5000/api/users/oauth/callback'
 }) {
-  const clientId = process.env.OAUTH_GOOGLE_CLIENT_ID || 'mock-google-client-id.apps.googleusercontent.com';
+  const clientId = process.env.OAUTH_GOOGLE_CLIENT_ID;
+  if (!clientId) {
+    const err = new Error('Google OAuth is not configured: set OAUTH_GOOGLE_CLIENT_ID (and OAUTH_GOOGLE_CLIENT_SECRET) before using OIDC sign-in.');
+    err.code = 'OAUTH_NOT_CONFIGURED';
+    throw err;
+  }
+
   const rawState = generateOAuthState();
   // State encodes a random CSRF token plus chosen initial role
   const state = Buffer.from(JSON.stringify({ csrf: rawState, role })).toString('base64url');
@@ -74,89 +80,71 @@ function parseOAuthState(stateString) {
 
 /**
  * Exchanges an authorization code for OIDC identity.
- * Supports both real Google OIDC (when configured and connected)
- * and an offline mock exchange for automated testing and local viva evaluation.
+ *
+ * Security note: this only ever trusts the provider. There is no mock mode and
+ * no simulated fallback — an invalid code, or a missing provider configuration,
+ * fails closed instead of minting a verified identity.
  *
  * @param {string} code - Authorization code from callback
  * @param {string} redirectUri - Must match the redirect_uri used in authorize
  * @returns {Promise<object>} Identity profile: { email, name, sub, provider }
  */
 async function exchangeCodeForProfile(code, redirectUri = process.env.OAUTH_GOOGLE_REDIRECT_URI || 'http://localhost:5000/api/users/oauth/callback') {
-  // 1. Mock / Test Code Handler (Guarantees reliable tests and offline viva demos)
-  if (code.startsWith('mock_') || code.startsWith('test_') || process.env.OAUTH_MOCK_MODE === 'true') {
-    const emailPrefix = code.replace(/^(mock_|test_)/, '') || 'demo.chef';
-    return {
-      email: `${emailPrefix}@gmail.com`,
-      name: `${emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1)} OIDC User`,
-      sub: `mock-google-sub-${crypto.randomBytes(8).toString('hex')}`,
-      provider: 'google',
-      isVerified: true
-    };
+  if (!code || typeof code !== 'string') {
+    throw new Error('Authorization code is required');
   }
 
-  // 2. Real Google OAuth2/OIDC exchange
   const clientId = process.env.OAUTH_GOOGLE_CLIENT_ID;
   const clientSecret = process.env.OAUTH_GOOGLE_CLIENT_SECRET;
 
-  if (!clientId || !clientSecret || clientId.startsWith('mock-')) {
-    // Graceful fallback for local development if Google client secret is omitted
-    return {
-      email: 'oauth.kitchen@gmail.com',
-      name: 'Google OAuth Kitchen Owner',
-      sub: `simulated-sub-${crypto.randomBytes(8).toString('hex')}`,
-      provider: 'google',
-      isVerified: true
-    };
+  if (!clientId || !clientSecret) {
+    const err = new Error('Google OAuth is not configured: set OAUTH_GOOGLE_CLIENT_ID and OAUTH_GOOGLE_CLIENT_SECRET.');
+    err.code = 'OAUTH_NOT_CONFIGURED';
+    throw err;
   }
 
-  try {
-    const tokenRes = await fetch(GOOGLE_CONFIG.tokenUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        code,
-        client_id: clientId,
-        client_secret: clientSecret,
-        redirect_uri: redirectUri,
-        grant_type: 'authorization_code'
-      })
-    });
+  const tokenRes = await fetch(GOOGLE_CONFIG.tokenUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code,
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uri: redirectUri,
+      grant_type: 'authorization_code'
+    })
+  });
 
-    if (!tokenRes.ok) {
-      const errBody = await tokenRes.text();
-      throw new Error(`OIDC Token exchange failed: ${errBody}`);
-    }
-
-    const tokenData = await tokenRes.json();
-    const accessToken = tokenData.access_token;
-
-    // Fetch verified claims from UserInfo endpoint
-    const userinfoRes = await fetch(GOOGLE_CONFIG.userinfoUrl, {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
-
-    if (!userinfoRes.ok) {
-      throw new Error('Failed to fetch OIDC userinfo');
-    }
-
-    const profile = await userinfoRes.json();
-    return {
-      email: profile.email,
-      name: profile.name || profile.email.split('@')[0],
-      sub: profile.sub,
-      provider: 'google',
-      isVerified: profile.email_verified || true
-    };
-  } catch (err) {
-    console.warn('[OIDC Service] Live exchange error, falling back to simulated profile:', err.message);
-    return {
-      email: 'oauth.kitchen@gmail.com',
-      name: 'Google OAuth Kitchen Owner',
-      sub: `simulated-sub-${crypto.randomBytes(8).toString('hex')}`,
-      provider: 'google',
-      isVerified: true
-    };
+  if (!tokenRes.ok) {
+    const err = new Error(`OIDC token exchange rejected the authorization code (HTTP ${tokenRes.status})`);
+    err.code = 'INVALID_GRANT';
+    throw err;
   }
+
+  const tokenData = await tokenRes.json();
+  const accessToken = tokenData.access_token;
+
+  // Fetch verified claims from the UserInfo endpoint
+  const userinfoRes = await fetch(GOOGLE_CONFIG.userinfoUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+
+  if (!userinfoRes.ok) {
+    throw new Error('Failed to fetch OIDC userinfo');
+  }
+
+  const profile = await userinfoRes.json();
+  if (!profile.email) {
+    throw new Error('OIDC userinfo did not include an email address');
+  }
+
+  return {
+    email: profile.email,
+    name: profile.name || profile.email.split('@')[0],
+    sub: profile.sub,
+    provider: 'google',
+    isVerified: profile.email_verified === true
+  };
 }
 
 module.exports = {

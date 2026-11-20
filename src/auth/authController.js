@@ -393,20 +393,32 @@ async function logout(req, res) {
 async function oauthAuthorize(req, res) {
   const { provider = 'google', role = 'restaurant_owner', redirect = 'false' } = req.query;
 
-  const authData = oidcService.getAuthorizationUrl({
-    provider,
-    role
-  });
+  try {
+    const authData = oidcService.getAuthorizationUrl({
+      provider,
+      role
+    });
 
-  if (redirect === 'true') {
-    return res.redirect(authData.authorizationUrl);
+    if (redirect === 'true') {
+      return res.redirect(authData.authorizationUrl);
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: authData,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('[OAuth Authorize Error]:', err);
+    return res.status(503).json({
+      success: false,
+      error: {
+        code: err.code || 'OAUTH_NOT_CONFIGURED',
+        message: err.message
+      },
+      timestamp: new Date().toISOString()
+    });
   }
-
-  return res.status(200).json({
-    success: true,
-    data: authData,
-    timestamp: new Date().toISOString()
-  });
 }
 
 /**
@@ -519,10 +531,11 @@ async function oauthCallback(req, res) {
     });
   } catch (err) {
     console.error('[OAuth Callback Error]:', err);
-    return res.status(500).json({
+    const status = err.code === 'OAUTH_NOT_CONFIGURED' ? 503 : err.code === 'INVALID_GRANT' ? 401 : 500;
+    return res.status(status).json({
       success: false,
       error: {
-        code: 'OAUTH_EXCHANGE_FAILED',
+        code: err.code === 'INVALID_GRANT' ? 'OAUTH_EXCHANGE_REJECTED' : 'OAUTH_EXCHANGE_FAILED',
         message: 'Failed to complete OAuth2/OIDC authentication: ' + err.message
       },
       timestamp: new Date().toISOString()
@@ -564,53 +577,11 @@ async function oauthToken(req, res) {
     });
   } catch (err) {
     console.error('[OAuth Token Exchange Error]:', err);
-    return res.status(500).json({
+    const status = err.code === 'OAUTH_NOT_CONFIGURED' ? 503 : err.code === 'INVALID_GRANT' ? 401 : 500;
+    return res.status(status).json({
       success: false,
       error: {
-        code: 'OAUTH_EXCHANGE_FAILED',
-        message: err.message
-      },
-      timestamp: new Date().toISOString()
-    });
-  }
-}
-
-/**
- * POST /api/users/oauth/mock
- * Dedicated deterministic endpoint for offline viva presentations & test automation.
- */
-async function oauthMock(req, res) {
-  const { email, name, role = 'restaurant_owner' } = req.body;
-
-  if (!email) {
-    return res.status(400).json({
-      success: false,
-      error: {
-        code: 'VALIDATION_ERROR',
-        message: 'Email is required for mock OIDC sign-in'
-      },
-      timestamp: new Date().toISOString()
-    });
-  }
-
-  try {
-    const authResult = await provisionOIDCUser({
-      email,
-      name: name || email.split('@')[0],
-      role
-    });
-
-    return res.status(200).json({
-      success: true,
-      data: authResult,
-      timestamp: new Date().toISOString()
-    });
-  } catch (err) {
-    console.error('[Mock OIDC Error]:', err);
-    return res.status(500).json({
-      success: false,
-      error: {
-        code: 'INTERNAL_ERROR',
+        code: err.code === 'INVALID_GRANT' ? 'OAUTH_EXCHANGE_REJECTED' : 'OAUTH_EXCHANGE_FAILED',
         message: err.message
       },
       timestamp: new Date().toISOString()
@@ -639,6 +610,5 @@ module.exports = {
   oauthAuthorize,
   oauthCallback,
   oauthToken,
-  oauthMock,
   getMe
 };

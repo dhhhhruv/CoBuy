@@ -20,7 +20,6 @@ router.post('/logout', authController.logout);
 router.get('/oauth/authorize', authController.oauthAuthorize);
 router.get('/oauth/callback', authController.oauthCallback);
 router.post('/oauth/token', authController.oauthToken);
-router.post('/oauth/mock', authController.oauthMock);
 
 // 3. Protected token verification route
 router.get('/me', authenticate, authController.getMe);

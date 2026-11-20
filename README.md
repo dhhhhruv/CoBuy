@@ -194,8 +194,14 @@ cd CoBuy
 # DB_USER=root
 # DB_PASSWORD=your_password
 # DB_NAME=cobuy_db
-# JWT_SECRET=your_jwt_secret_key
-# PORT=5000
+# PORT=5055
+#
+# JWT_SECRET is mandatory in production and must be at least 32 random chars:
+#   node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+# JWT_SECRET=<generated value>
+#
+# CORS_ORIGINS lists extra browser origins (comma separated). The SPA is served
+# from the same origin, so it can stay empty when hosted.
 
 # 3. Install dependencies
 npm install

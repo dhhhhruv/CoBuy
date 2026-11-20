@@ -12,7 +12,41 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'cobuy_development_secret_key_change_in_production';
+// Known placeholder values that must never sign real tokens.
+const PLACEHOLDER_JWT_SECRETS = new Set([
+  'cobuy_development_secret_key_change_in_production',
+  'replace_with_a_long_random_secret',
+  'your_jwt_secret_key',
+  'secret'
+]);
+
+/**
+ * Resolves the JWT signing secret.
+ * Production fails fast on a missing/placeholder/short secret; development uses
+ * a random per-process secret so a cloned repo never signs tokens with a
+ * publicly known key.
+ */
+function resolveJwtSecret() {
+  const secret = process.env.JWT_SECRET;
+  const unusable = !secret || secret.length < 32 || PLACEHOLDER_JWT_SECRETS.has(secret);
+
+  if (!unusable) return secret;
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      '[Auth] JWT_SECRET is missing, a known placeholder, or shorter than 32 characters. ' +
+      'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'hex\'))"'
+    );
+  }
+
+  console.warn(
+    '[Auth] JWT_SECRET is missing or a placeholder. Using a random per-process secret for this ' +
+    'development run; tokens stop working on restart. Set JWT_SECRET in .env.'
+  );
+  return crypto.randomBytes(48).toString('hex');
+}
+
+const JWT_SECRET = resolveJwtSecret();
 const JWT_ACCESS_EXPIRES_IN = process.env.JWT_ACCESS_EXPIRES_IN || '15m';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
 const REFRESH_TOKEN_DAYS = parseInt(process.env.JWT_REFRESH_EXPIRES_IN_DAYS || '7', 10);

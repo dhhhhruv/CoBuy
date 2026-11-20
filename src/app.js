@@ -27,14 +27,35 @@ const PORT = process.env.PORT || 5000;
 
 // ----------------------------------------------------------------------------
 // Middleware Explanation (Viva Notes):
-// 1. cors(): Enables Cross-Origin Resource Sharing so Debangshu's frontend
-//    running on a different port can communicate with this API.
+// 1. cors(): Allow-list only. The SPA is served from this same origin, so no
+//    cross-origin access is needed in production. Additional trusted origins
+//    must be listed explicitly in CORS_ORIGINS (comma separated).
 // 2. express.json(): Built-in body parser that converts raw incoming JSON payloads
 //    in the HTTP request body into accessible JavaScript objects on req.body.
 // 3. express.static(): Serves Debangshu's SPA frontend from src/client.
 // ----------------------------------------------------------------------------
-app.use(cors());
-app.use(express.json());
+const normalizeOrigin = (origin) => String(origin).trim().replace(/\/+$/, '').toLowerCase();
+
+const allowedOrigins = new Set(
+  [
+    `http://localhost:${PORT}`,
+    `http://127.0.0.1:${PORT}`,
+    ...(process.env.CORS_ORIGINS || '').split(',')
+  ]
+    .map((origin) => origin && normalizeOrigin(origin))
+    .filter(Boolean)
+);
+
+app.use(cors({
+  origin(origin, callback) {
+    // No Origin header: same-origin navigation, curl, server-to-server.
+    if (!origin) return callback(null, true);
+    return callback(null, allowedOrigins.has(normalizeOrigin(origin)));
+  },
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'client')));
 
 // ----------------------------------------------------------------------------

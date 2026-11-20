@@ -1,17 +1,12 @@
 // ============================================================================
 // File: src/client/js/pages/AuthPage.js
 // Owner: Debangshu (Frontend Lead)
-// Purpose: Login and registration against the real API, with the seeded demo
-//          accounts available as one-click sign-ins for the viva.
+// Purpose: Login and registration against the real API.
 // ============================================================================
 
 import { api } from '../api/client.js';
 import { store } from '../state.js';
 import { showToast } from '../components/Toast.js';
-
-const DEMO_PASSWORD = 'Password123!';
-const DEMO_KITCHEN = 'demo.kitchen.a@cobuy.demo';
-const DEMO_SUPPLIER = 'demo.freshfoods@cobuy.demo';
 
 export function renderAuthPage() {
   if (store.user) {
@@ -58,12 +53,12 @@ export function renderAuthPage() {
         <form id="form-login">
           <div class="form-group">
             <label class="form-label" for="login-email">Email Address</label>
-            <input type="email" id="login-email" class="form-control" placeholder="name@kitchen.com" required value="${DEMO_KITCHEN}">
+            <input type="email" id="login-email" class="form-control" placeholder="name@kitchen.com" autocomplete="email" required>
           </div>
 
           <div class="form-group">
             <label class="form-label" for="login-password">Password</label>
-            <input type="password" id="login-password" class="form-control" placeholder="••••••••" required value="${DEMO_PASSWORD}">
+            <input type="password" id="login-password" class="form-control" placeholder="••••••••" autocomplete="current-password" required>
           </div>
 
           <button type="submit" id="btn-submit-login" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;">
@@ -113,18 +108,6 @@ export function renderAuthPage() {
           </button>
         </form>
 
-        <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px dashed var(--border); text-align: center;">
-          <p style="font-size: 0.75rem; color: var(--text-2); margin-bottom: 0.75rem; text-transform: uppercase; font-weight: 700;">
-            Seeded Demo Accounts
-          </p>
-          <div style="display: flex; gap: 0.5rem; justify-content: center;">
-            <button id="quick-demo-kitchen" class="btn btn-outline btn-sm">Kitchen A Demo</button>
-            <button id="quick-demo-supplier" class="btn btn-outline btn-sm">Fresh Foods Supplier Demo</button>
-          </div>
-          <p style="font-size: 0.7rem; color: var(--text-2); margin-top: 0.6rem;">
-            Requires <code>npm run db:seed</code>. Password: <code>${DEMO_PASSWORD}</code>
-          </p>
-        </div>
       </div>
     </div>
   `;
@@ -222,24 +205,6 @@ export function bindAuthEvents(router) {
     } finally {
       button.disabled = false;
       button.textContent = 'Create Account';
-    }
-  });
-
-  document.getElementById('quick-demo-kitchen')?.addEventListener('click', async () => {
-    try {
-      await signIn(DEMO_KITCHEN, DEMO_PASSWORD);
-      showToast('Signed in as Kitchen A.', 'success');
-    } catch (error) {
-      showAlert(`${error.message} Run "npm run db:seed" first.`);
-    }
-  });
-
-  document.getElementById('quick-demo-supplier')?.addEventListener('click', async () => {
-    try {
-      await signIn(DEMO_SUPPLIER, DEMO_PASSWORD);
-      showToast('Signed in as Fresh Foods.', 'success');
-    } catch (error) {
-      showAlert(`${error.message} Run "npm run db:seed" first.`);
     }
   });
 }

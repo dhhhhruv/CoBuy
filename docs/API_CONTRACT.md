@@ -287,19 +287,15 @@ Returns `{ token, accessToken, refreshToken, tokenType, expiresIn, user }`.
 
 ---
 
-### `POST /api/users/oauth/mock`
+### ~~`POST /api/users/oauth/mock`~~ — removed
 - **Owner:** Dhruv (Database & Auth)
-- **Auth:** None (Public)
-- **Description:** Deterministic OIDC mock sign-in endpoint for offline testing & viva demonstrations.
+- **Auth:** N/A
+- **Description:** Removed for security. This public endpoint minted a verified account for any
+  caller-supplied email address. It now returns `404 NOT_FOUND`.
 
-#### Request Body:
-```json
-{
-  "email": "chef@gmail.com",
-  "name": "Chef Demo",
-  "role": "restaurant_owner"
-}
-```
+OIDC sign-in only succeeds with a real authorization code exchanged against Google; mock and
+forged codes are rejected (`401 OAUTH_EXCHANGE_REJECTED`). If the Google client is not configured,
+`/api/users/oauth/authorize` and the exchange endpoints return `503 OAUTH_NOT_CONFIGURED`.
 
 ## 4. Product & Catalogue Management (Shaaz's Area)
 

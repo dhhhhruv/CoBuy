@@ -21,11 +21,12 @@ export async function renderRestaurantDashboardPage() {
     );
   }
 
-  const pools = await api.getNearbyPools(store.location.latitude, store.location.longitude);
+  const [activePools, fulfilledPools] = await Promise.all([
+    api.getNearbyPools(store.location.latitude, store.location.longitude, 5000, 'ACTIVE'),
+    api.getNearbyPools(store.location.latitude, store.location.longitude, 5000, 'FULFILLED')
+  ]);
+  const pools = activePools;
   const orders = profile ? await api.getMyOrders() : [];
-
-  const activePools = pools.filter((pool) => pool.status === 'ACTIVE');
-  const fulfilledPools = pools.filter((pool) => pool.status === 'FULFILLED');
   const pendingAmount = orders
     .filter((order) => order.paymentStatus === 'PENDING')
     .reduce((sum, order) => sum + Number(order.pledgedAmount || 0), 0);

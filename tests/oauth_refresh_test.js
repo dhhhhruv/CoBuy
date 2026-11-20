@@ -172,65 +172,62 @@ async function runOAuthRefreshTests() {
     console.log('\n--- 5. Testing OAuth2 / OIDC Authorization URL ---');
 
     const authUrlRes = await request('GET', '/api/users/oauth/authorize?provider=google&role=supplier');
-    assert(authUrlRes.status === 200, 'GET /api/users/oauth/authorize succeeds');
-    assert(
-      authUrlRes.body.data.authorizationUrl.includes('accounts.google.com'),
-      'Authorization URL points to Google OIDC endpoint'
-    );
-    assert(
-      authUrlRes.body.data.authorizationUrl.includes('scope=openid+email+profile'),
-      'OIDC openid, email, and profile scopes are requested'
-    );
-    assert(!!authUrlRes.body.data.state, 'Cryptographic state parameter is returned for CSRF protection');
+    if (authUrlRes.status === 503) {
+      assert(
+        authUrlRes.body.error.code === 'OAUTH_NOT_CONFIGURED',
+        'Unconfigured OAuth reports OAUTH_NOT_CONFIGURED instead of inventing an authorization URL'
+      );
+    } else {
+      assert(authUrlRes.status === 200, 'GET /api/users/oauth/authorize succeeds when configured');
+      assert(
+        authUrlRes.body.data.authorizationUrl.includes('accounts.google.com'),
+        'Authorization URL points to Google OIDC endpoint'
+      );
+      assert(
+        authUrlRes.body.data.authorizationUrl.includes('scope=openid+email+profile'),
+        'OIDC openid, email, and profile scopes are requested'
+      );
+      assert(!!authUrlRes.body.data.state, 'Cryptographic state parameter is returned for CSRF protection');
+    }
 
     // ------------------------------------------------------------------------
-    // 6. OAuth2 / OIDC: Callback & JIT User Provisioning
+    // 6. Mock / forged authorization codes are rejected
     // ------------------------------------------------------------------------
-    console.log('\n--- 6. Testing OIDC Callback & Just-In-Time Provisioning ---');
+    console.log('\n--- 6. Testing That Mock / Forged OAuth Codes Are Rejected ---');
 
-    const mockCode = `mock_chef_${timestamp}`;
-    const testState = authUrlRes.body.data.state;
-
-    const callbackRes = await request(
+    const mockedCallback = await request(
       'GET',
-      `/api/users/oauth/callback?code=${mockCode}&state=${testState}`
+      `/api/users/oauth/callback?code=mock_chef_${timestamp}&state=anything`
     );
+    assert(mockedCallback.status !== 200, 'OIDC callback rejects a mock_ authorization code');
+    assert(!mockedCallback.body?.data, 'No tokens are issued for a mock_ authorization code');
 
-    assert(callbackRes.status === 200, 'OIDC callback exchange succeeds');
-    assert(!!callbackRes.body.data.accessToken, 'OIDC returns valid accessToken');
-    assert(!!callbackRes.body.data.refreshToken, 'OIDC returns valid refreshToken');
-    assert(
-      callbackRes.body.data.user.email === `chef_${timestamp}@gmail.com`,
-      'JIT User Provisioning created user with provider email'
+    const forgedCallback = await request(
+      'GET',
+      `/api/users/oauth/callback?code=test_forged_${timestamp}`
     );
-    assert(
-      callbackRes.body.data.user.roles.includes('supplier'),
-      'User was assigned the role specified in state parameter'
-    );
-
-    // Verify token issued by OIDC callback works on protected endpoints
-    const oidcUserMe = await request('GET', '/api/users/me', null, callbackRes.body.data.accessToken);
-    assert(oidcUserMe.status === 200, 'Access token from OIDC authenticates API requests');
-
-    // ------------------------------------------------------------------------
-    // 7. OAuth2 / OIDC: Direct SPA Token Exchange & Mock Endpoint
-    // ------------------------------------------------------------------------
-    console.log('\n--- 7. Testing SPA OIDC Token Exchange & Viva Mock Endpoint ---');
+    assert(forgedCallback.status !== 200, 'OIDC callback rejects a test_ authorization code');
+    assert(!forgedCallback.body?.data, 'No tokens are issued for a test_ authorization code');
 
     const spaTokenRes = await request('POST', '/api/users/oauth/token', {
       code: `mock_spaclient_${timestamp}`,
       role: 'restaurant_owner'
     });
-    assert(spaTokenRes.status === 200, 'POST /api/users/oauth/token succeeds for SPAs');
-    assert(!!spaTokenRes.body.data.accessToken, 'SPA receives accessToken');
+    assert(spaTokenRes.status !== 200, 'SPA token exchange rejects a mock_ authorization code');
+    assert(!spaTokenRes.body?.data, 'SPA token exchange issues no tokens for a mock_ code');
+
+    // ------------------------------------------------------------------------
+    // 7. The mock sign-in endpoint is gone
+    // ------------------------------------------------------------------------
+    console.log('\n--- 7. Testing That The Mock Sign-In Endpoint Is Gone ---');
 
     const mockOIDCRes = await request('POST', '/api/users/oauth/mock', {
-      email: `viva.examiner.${timestamp}@example.com`,
-      name: 'Viva Examiner',
+      email: `no.self.signup.${timestamp}@example.com`,
+      name: 'No Self Signup',
       role: 'restaurant_owner'
     });
-    assert(mockOIDCRes.status === 200, 'POST /api/users/oauth/mock succeeds for viva demonstration');
-    assert(mockOIDCRes.body.data.user.roles.includes('restaurant_owner'), 'Role matches requested role');
+    assert(mockOIDCRes.status === 404, 'POST /api/users/oauth/mock is removed (HTTP 404)');
+    assert(!mockOIDCRes.body?.data, 'The removed endpoint cannot mint an account or tokens');
 
     console.log('\n🎉 ALL OAUTH2, OIDC & REFRESH TOKEN TESTS PASSED 100%!\n');
   } finally {
