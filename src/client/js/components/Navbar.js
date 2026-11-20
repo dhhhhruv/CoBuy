@@ -84,8 +84,9 @@ export function renderNavbar() {
         </nav>
 
         <div class="nav-actions">
-          <button type="button" id="btn-theme" class="btn btn-outline btn-sm" title="Toggle colour theme">
-            ${themeLabel()}
+          <button type="button" id="btn-theme" class="btn btn-outline btn-sm"
+                  title="Toggle colour theme" aria-label="Toggle colour theme">
+            <span class="theme-label">${themeLabel()}</span>
           </button>
           ${identity}
         </div>
@@ -99,7 +100,8 @@ export function bindNavbarEvents(router) {
     const root = document.documentElement;
     const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
     root.dataset.theme = next;
-    event.currentTarget.textContent = themeLabel();
+    const label = event.currentTarget.querySelector('.theme-label');
+    if (label) label.textContent = themeLabel();
     try {
       localStorage.setItem('cobuy-theme', next);
     } catch (e) {
