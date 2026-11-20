@@ -27,7 +27,11 @@ async function runMigration() {
 
   try {
     const schemaPath = path.join(__dirname, 'schema.sql');
-    const sqlScript = fs.readFileSync(schemaPath, 'utf8');
+    // The DDL hardcodes cobuy_db for readability; honour DB_NAME so a hosted
+    // deployment can point the schema at its own database without editing it.
+    const sqlScript = fs
+      .readFileSync(schemaPath, 'utf8')
+      .replaceAll('cobuy_db', process.env.DB_NAME || 'cobuy_db');
 
     console.log(`[Migration] Reading schema file from: ${schemaPath}`);
     console.log('[Migration] Executing schema DDL statements...');

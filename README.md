@@ -204,6 +204,9 @@ npm install
 npm run db:migrate
 npm run db:seed
 
+# 4b. Or wipe everything and reseed in one step (clears test/demo pollution)
+npm run db:reset
+
 # 5. Start the server (API + static frontend)
 npm start
 # API:      http://localhost:5000/api
